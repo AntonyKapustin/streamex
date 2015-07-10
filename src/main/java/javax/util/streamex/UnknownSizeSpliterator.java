@@ -62,8 +62,6 @@ import java.util.function.Consumer;
 
     @Override
     public boolean tryAdvance(Consumer<? super T> action) {
-        if (action == null)
-            throw new NullPointerException();
         if (it != null) {
             if (it.hasNext()) {
                 action.accept(it.next());

@@ -1,6 +1,7 @@
 package javax.util.streamex;
 
 import static org.junit.Assert.*;
+import static javax.util.streamex.TestHelpers.*;
 
 import java.util.List;
 import java.util.Spliterator;
@@ -28,6 +29,14 @@ public class UnknownSizeSpliteratorTest {
         assertEquals(48, spliterator.estimateSize());
         assertEquals(48, spliterator2.estimateSize());
         assertEquals(54, count.get());
+    }
+    
+    @Test
+    public void testSpliterator() {
+        for(int size: new int[] {1, 5, 100, 1000, 1023, 1024, 1025, 2049}) {
+            List<Integer> input = IntStreamEx.range(size).boxed().toList();
+            checkSpliterator("100", input, () -> new UnknownSizeSpliterator<>(input.iterator()));
+        }
     }
     
     @Test
