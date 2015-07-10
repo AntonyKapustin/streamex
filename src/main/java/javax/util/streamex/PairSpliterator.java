@@ -16,6 +16,7 @@
 package javax.util.streamex;
 
 import java.util.Spliterator;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.DoubleBinaryOperator;
@@ -25,239 +26,352 @@ import java.util.function.IntConsumer;
 import java.util.function.LongBinaryOperator;
 import java.util.function.LongConsumer;
 
-abstract class PairSpliterator<T, S extends Spliterator<T>, R> implements Spliterator<R> {
-    S source;
-    boolean hasLast, hasPrev;
+import static javax.util.streamex.StreamExInternals.*;
 
-    public PairSpliterator(S source, boolean hasPrev, boolean hasLast) {
+/**
+ * @author Tagir Valeev
+ */
+/* package */ abstract class PairSpliterator<T, S extends Spliterator<T>, R, SS extends PairSpliterator<T, S, R, SS>> implements
+        Spliterator<R>, Cloneable {
+    private static Sink<?> EMPTY = new Sink<>(null);
+    // Common lock for all the derived spliterators
+    private final Object lock = new Object();
+    S source;
+    @SuppressWarnings("unchecked")
+    Sink<T> left = (Sink<T>) EMPTY;
+    @SuppressWarnings("unchecked")
+    Sink<T> right = (Sink<T>) EMPTY;
+
+    private static final class Sink<T> {
+        Sink<T> other;
+        private T payload = none();
+        private final Object lock;
+
+        Sink(Object lock) {
+            this.lock = lock;
+        }
+
+        boolean push(T payload, BiConsumer<T, T> fn, boolean isLeft) {
+            if(lock == null)
+                return false;
+            T otherPayload;
+            synchronized(lock) {
+                Sink<T> that = other;
+                if (that == null)
+                    return false;
+                otherPayload = that.payload;
+                if (otherPayload == NONE) {
+                    this.payload = payload;
+                    return false;
+                }
+                other = null;
+                that.clear();
+            }
+            if(isLeft)
+                fn.accept(payload, otherPayload);
+            else
+                fn.accept(otherPayload, payload);
+            return true;
+        }
+
+        boolean connect(Sink<T> right, BiConsumer<T, T> fn) {
+            if(lock == null)
+                return false;
+            T a, b;
+            synchronized(lock) {
+                Sink<T> leftLeft = this.other; 
+                Sink<T> rightRight = right.other;
+                if(leftLeft == null || rightRight == null) {
+                    if(rightRight != null)
+                        rightRight.clear();
+                    if(leftLeft != null)
+                        leftLeft.clear();
+                    return false;
+                }
+                rightRight.other = leftLeft;
+                leftLeft.other = rightRight;
+                if (leftLeft.payload == NONE || rightRight.payload == NONE)
+                    return false;
+                a = leftLeft.payload;
+                b = rightRight.payload;
+                leftLeft.clear();
+                rightRight.clear();
+            }
+            fn.accept(a, b);
+            return true;
+        }
+
+        void clear() {
+            other = null;
+            payload = none();
+        }
+    }
+
+    PairSpliterator(S source) {
         this.source = source;
-        this.hasLast = hasLast;
-        this.hasPrev = hasPrev;
     }
 
     @Override
     public long estimateSize() {
         long size = source.estimateSize();
-        if (size == Long.MAX_VALUE)
+        if (size == Long.MAX_VALUE || size == 0)
             return size;
-        if (hasLast)
-            size++;
-        if (!hasPrev && size > 0)
-            size--;
-        return size;
+        return size - 1;
     }
 
     @Override
     public int characteristics() {
-        return source.characteristics() & (SIZED | SUBSIZED | CONCURRENT | IMMUTABLE | ORDERED);
+        return source.characteristics()
+            & ((left == EMPTY && right == EMPTY ? SIZED : 0) | CONCURRENT | IMMUTABLE | ORDERED);
     }
 
-    static final class PSOfRef<T, R> extends PairSpliterator<T, Spliterator<T>, R> {
-        private T cur;
-        private final T last;
-        private final BiFunction<? super T, ? super T, ? extends R> mapper;
+    @SuppressWarnings("unchecked")
+    @Override
+    public SS trySplit() {
+        S prefixSource = (S) source.trySplit();
+        if (prefixSource == null)
+            return null;
+        try {
+            SS clone = (SS) clone();
+            Sink<T> left = new Sink<>(lock);
+            Sink<T> right = new Sink<>(lock);
+            clone.source = prefixSource;
+            clone.right = right.other = left;
+            this.left = left.other = right;
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new InternalError();
+        }
+    }
 
-        public PSOfRef(BiFunction<? super T, ? super T, ? extends R> mapper, Spliterator<T> source, T prev, boolean hasPrev, T last,
-                boolean hasLast) {
-            super(source, hasPrev, hasLast);
-            this.cur = prev;
-            this.last = last;
+    static final class PSOfRef<T, R> extends PairSpliterator<T, Spliterator<T>, R, PSOfRef<T, R>> implements Consumer<T> {
+        private final BiFunction<? super T, ? super T, ? extends R> mapper;
+        private T cur;
+
+        public PSOfRef(BiFunction<? super T, ? super T, ? extends R> mapper, Spliterator<T> source) {
+            super(source);
             this.mapper = mapper;
         }
 
-        void setCur(T t) {
+        @Override
+        public void accept(T t) {
             cur = t;
+        }
+
+        private BiConsumer<T, T> fn(Consumer<? super R> action) {
+            return (a, b) -> action.accept(mapper.apply(a, b));
         }
 
         @Override
         public boolean tryAdvance(Consumer<? super R> action) {
-            if (!hasPrev) {
-                if (!source.tryAdvance(this::setCur)) {
-                    return false;
+            Sink<T> l = left, r = right;
+            if (l != null) {
+                left = null;
+                if (!source.tryAdvance(this)) {
+                    right = null;
+                    return l.connect(r, fn(action));
                 }
-                hasPrev = true;
+                if (l.push(cur, fn(action), false))
+                    return true;
             }
             T prev = cur;
-            if (!source.tryAdvance(this::setCur)) {
-                if (!hasLast)
-                    return false;
-                hasLast = false;
-                cur = last;
+            if (!source.tryAdvance(this)) {
+                right = null;
+                return r != null && r.push(prev, fn(action), true);
             }
             action.accept(mapper.apply(prev, cur));
             return true;
         }
 
         @Override
-        public Spliterator<R> trySplit() {
-            Spliterator<T> prefixSource = source.trySplit();
-            if (prefixSource == null)
-                return null;
-            T prev = cur;
-            if (!source.tryAdvance(this::setCur)) {
-                source = prefixSource;
-                return null;
+        public void forEachRemaining(Consumer<? super R> action) {
+            Sink<T> l = left, r = right;
+            left = right = null;
+            if (l != null) {
+                if (!source.tryAdvance(this)) {
+                    l.connect(r, fn(action));
+                    return;
+                }
+                l.push(cur, fn(action), false);
             }
-            boolean oldHasPrev = hasPrev;
-            hasPrev = true;
-            return new PSOfRef<>(mapper, prefixSource, prev, oldHasPrev, cur, true);
+            source.forEachRemaining(next -> action.accept(mapper.apply(cur, cur = next)));
+            if (r != null) {
+                r.push(cur, fn(action), true);
+            }
         }
     }
 
-    static final class PSOfInt extends PairSpliterator<Integer, Spliterator.OfInt, Integer> implements
-            Spliterator.OfInt {
-        private int cur;
-        private final int last;
+    static final class PSOfInt extends PairSpliterator<Integer, Spliterator.OfInt, Integer, PSOfInt> implements
+            Spliterator.OfInt, IntConsumer {
         private final IntBinaryOperator mapper;
+        private int cur;
 
-        PSOfInt(IntBinaryOperator mapper, Spliterator.OfInt source, int prev, boolean hasPrev, int last, boolean hasLast) {
-            super(source, hasPrev, hasLast);
-            this.cur = prev;
-            this.last = last;
+        public PSOfInt(IntBinaryOperator mapper, Spliterator.OfInt source) {
+            super(source);
             this.mapper = mapper;
         }
 
-        void setCur(int t) {
+        @Override
+        public void accept(int t) {
             cur = t;
+        }
+
+        private BiConsumer<Integer, Integer> fn(IntConsumer action) {
+            return (a, b) -> action.accept(mapper.applyAsInt(a, b));
         }
 
         @Override
         public boolean tryAdvance(IntConsumer action) {
-            if (!hasPrev) {
-                if (!source.tryAdvance((IntConsumer) this::setCur)) {
-                    return false;
+            Sink<Integer> l = left, r = right;
+            if (l != null) {
+                left = null;
+                if (!source.tryAdvance(this)) {
+                    right = null;
+                    return l.connect(r, fn(action));
                 }
-                hasPrev = true;
+                if (l.push(cur, fn(action), false))
+                    return true;
             }
             int prev = cur;
-            if (!source.tryAdvance((IntConsumer) this::setCur)) {
-                if (!hasLast)
-                    return false;
-                hasLast = false;
-                cur = last;
+            if (!source.tryAdvance(this)) {
+                right = null;
+                return r != null && r.push(prev, fn(action), true);
             }
             action.accept(mapper.applyAsInt(prev, cur));
             return true;
         }
 
         @Override
-        public Spliterator.OfInt trySplit() {
-            Spliterator.OfInt prefixSource = source.trySplit();
-            if (prefixSource == null)
-                return null;
-            int prev = cur;
-            if (!source.tryAdvance((IntConsumer) this::setCur)) {
-                source = prefixSource;
-                return null;
+        public void forEachRemaining(IntConsumer action) {
+            Sink<Integer> l = left, r = right;
+            left = right = null;
+            if (l != null) {
+                if (!source.tryAdvance(this)) {
+                    l.connect(r, fn(action));
+                    return;
+                }
+                l.push(cur, fn(action), false);
             }
-            boolean oldHasPrev = hasPrev;
-            hasPrev = true;
-            return new PSOfInt(mapper, prefixSource, prev, oldHasPrev, cur, true);
+            source.forEachRemaining((IntConsumer) next -> action.accept(mapper.applyAsInt(cur, cur = next)));
+            if (r != null) {
+                r.push(cur, fn(action), true);
+            }
         }
     }
 
-    static final class PSOfLong extends PairSpliterator<Long, Spliterator.OfLong, Long> implements Spliterator.OfLong {
-        private long cur;
-        private final long last;
+    static final class PSOfLong extends PairSpliterator<Long, Spliterator.OfLong, Long, PSOfLong> implements
+            Spliterator.OfLong, LongConsumer {
         private final LongBinaryOperator mapper;
+        private long cur;
 
-        PSOfLong(LongBinaryOperator mapper, Spliterator.OfLong source, long prev, boolean hasPrev, long last,
-                boolean hasLast) {
-            super(source, hasPrev, hasLast);
-            this.cur = prev;
-            this.last = last;
+        public PSOfLong(LongBinaryOperator mapper, Spliterator.OfLong source) {
+            super(source);
             this.mapper = mapper;
         }
 
-        void setCur(long t) {
+        @Override
+        public void accept(long t) {
             cur = t;
+        }
+
+        private BiConsumer<Long, Long> fn(LongConsumer action) {
+            return (a, b) -> action.accept(mapper.applyAsLong(a, b));
         }
 
         @Override
         public boolean tryAdvance(LongConsumer action) {
-            if (!hasPrev) {
-                if (!source.tryAdvance((LongConsumer) this::setCur)) {
-                    return false;
+            Sink<Long> l = left, r = right;
+            if (l != null) {
+                left = null;
+                if (!source.tryAdvance(this)) {
+                    right = null;
+                    return l.connect(r, fn(action));
                 }
-                hasPrev = true;
+                if (l.push(cur, fn(action), false))
+                    return true;
             }
             long prev = cur;
-            if (!source.tryAdvance((LongConsumer) this::setCur)) {
-                if (!hasLast)
-                    return false;
-                hasLast = false;
-                cur = last;
+            if (!source.tryAdvance(this)) {
+                right = null;
+                return r != null && r.push(prev, fn(action), true);
             }
             action.accept(mapper.applyAsLong(prev, cur));
             return true;
         }
 
         @Override
-        public Spliterator.OfLong trySplit() {
-            Spliterator.OfLong prefixSource = source.trySplit();
-            if (prefixSource == null)
-                return null;
-            long prev = cur;
-            if (!source.tryAdvance((LongConsumer) this::setCur)) {
-                source = prefixSource;
-                return null;
+        public void forEachRemaining(LongConsumer action) {
+            Sink<Long> l = left, r = right;
+            left = right = null;
+            if (l != null) {
+                if (!source.tryAdvance(this)) {
+                    l.connect(r, fn(action));
+                    return;
+                }
+                l.push(cur, fn(action), false);
             }
-            boolean oldHasPrev = hasPrev;
-            hasPrev = true;
-            return new PSOfLong(mapper, prefixSource, prev, oldHasPrev, cur, true);
+            source.forEachRemaining((LongConsumer) next -> action.accept(mapper.applyAsLong(cur, cur = next)));
+            if (r != null) {
+                r.push(cur, fn(action), true);
+            }
         }
     }
 
-    static final class PSOfDouble extends PairSpliterator<Double, Spliterator.OfDouble, Double> implements
-            Spliterator.OfDouble {
-        private double cur;
-        private final double last;
+    static final class PSOfDouble extends PairSpliterator<Double, Spliterator.OfDouble, Double, PSOfDouble> implements
+            Spliterator.OfDouble, DoubleConsumer {
         private final DoubleBinaryOperator mapper;
+        private double cur;
 
-        PSOfDouble(DoubleBinaryOperator mapper, Spliterator.OfDouble source, double prev, boolean hasPrev, double last,
-                boolean hasLast) {
-            super(source, hasPrev, hasLast);
-            this.cur = prev;
-            this.last = last;
+        public PSOfDouble(DoubleBinaryOperator mapper, Spliterator.OfDouble source) {
+            super(source);
             this.mapper = mapper;
         }
 
-        void setCur(double t) {
+        @Override
+        public void accept(double t) {
             cur = t;
+        }
+
+        private BiConsumer<Double, Double> fn(DoubleConsumer action) {
+            return (a, b) -> action.accept(mapper.applyAsDouble(a, b));
         }
 
         @Override
         public boolean tryAdvance(DoubleConsumer action) {
-            if (!hasPrev) {
-                if (!source.tryAdvance((DoubleConsumer) this::setCur)) {
-                    return false;
+            Sink<Double> l = left, r = right;
+            if (l != null) {
+                left = null;
+                if (!source.tryAdvance(this)) {
+                    right = null;
+                    return l.connect(r, fn(action));
                 }
-                hasPrev = true;
+                if (l.push(cur, fn(action), false))
+                    return true;
             }
             double prev = cur;
-            if (!source.tryAdvance((DoubleConsumer) this::setCur)) {
-                if (!hasLast)
-                    return false;
-                hasLast = false;
-                cur = last;
+            if (!source.tryAdvance(this)) {
+                right = null;
+                return r != null && r.push(prev, fn(action), true);
             }
             action.accept(mapper.applyAsDouble(prev, cur));
             return true;
         }
 
         @Override
-        public Spliterator.OfDouble trySplit() {
-            Spliterator.OfDouble prefixSource = source.trySplit();
-            if (prefixSource == null)
-                return null;
-            double prev = cur;
-            if (!source.tryAdvance((DoubleConsumer) this::setCur)) {
-                source = prefixSource;
-                return null;
+        public void forEachRemaining(DoubleConsumer action) {
+            Sink<Double> l = left, r = right;
+            left = right = null;
+            if (l != null) {
+                if (!source.tryAdvance(this)) {
+                    l.connect(r, fn(action));
+                    return;
+                }
+                l.push(cur, fn(action), false);
             }
-            boolean oldHasPrev = hasPrev;
-            hasPrev = true;
-            return new PSOfDouble(mapper, prefixSource, prev, oldHasPrev, cur, true);
+            source.forEachRemaining((DoubleConsumer) next -> action.accept(mapper.applyAsDouble(cur, cur = next)));
+            if (r != null) {
+                r.push(cur, fn(action), true);
+            }
         }
     }
 }

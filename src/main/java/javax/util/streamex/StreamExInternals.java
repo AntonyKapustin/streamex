@@ -22,7 +22,10 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.Map.Entry;
 import java.util.function.BiConsumer;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
@@ -34,10 +37,14 @@ import java.util.stream.Collector.Characteristics;
 import java.util.stream.Stream;
 
 /* package */final class StreamExInternals {
+    static final boolean IS_JDK9 = System.getProperty("java.version", "").compareTo("1.9") >= 0;
     static final int INITIAL_SIZE = 128;
+    static final Supplier<long[]> LONG_BOX = () -> new long[1];
+    static final Supplier<int[]> INT_BOX = () -> new int[1];
     static final Function<int[], Integer> UNBOX_INT = box -> box[0];
     static final Function<long[], Long> UNBOX_LONG = box -> box[0];
     static final BiConsumer<long[], long[]> SUM_LONG = (box1, box2) -> box1[0] += box2[0];
+    static final BiConsumer<int[], int[]> SUM_INT = (box1, box2) -> box1[0] += box2[0];
     static final Function<double[], Double> UNBOX_DOUBLE = box -> box[0];
     static final Object NONE = new Object();
     static final Set<Characteristics> NO_CHARACTERISTICS = EnumSet.noneOf(Characteristics.class);
@@ -503,15 +510,12 @@ import java.util.stream.Stream;
             return merger;
         }
     }
-    
-    static final class Box<A> {
-        A obj;
-        
+
+    static class Box<A> {
+        A a;
+
         Box(A obj) {
-            this.obj = obj;
-        }
-        
-        Box() {
+            this.a = obj;
         }
 
         static <A> Supplier<Box<A>> supplier(Supplier<A> supplier) {
@@ -519,22 +523,134 @@ import java.util.stream.Stream;
         }
 
         static <A> BiConsumer<Box<A>, Box<A>> combiner(BinaryOperator<A> combiner) {
-            return (box1, box2) -> box1.obj = combiner.apply(box1.obj, box2.obj);
+            return (box1, box2) -> box1.a = combiner.apply(box1.a, box2.a);
         }
 
         static <A, R> Function<Box<A>, R> finisher(Function<A, R> finisher) {
-            return box -> finisher.apply(box.obj);
+            return box -> finisher.apply(box.a);
+        }
+        
+        static <A> Optional<A> asOptional(Box<A> box) {
+            return box == null ? Optional.empty() : Optional.of(box.a);  
+        }
+    }
+
+    static final class PairBox<A, B> extends Box<A> {
+        B b;
+
+        PairBox(A a, B b) {
+            super(a);
+            this.b = b;
+        }
+        
+        static <T> PairBox<T, T> single(T a) {
+            return new PairBox<>(a, a);
         }
     }
     
-    static final class PairBox<A, B> {
-        A a;
-        B b;
+    static final class ObjIntBox<A> extends Box<A> implements Entry<Integer, A> {
+        int b;
         
-        PairBox(A a, B b) {
-            this.a = a;
+        ObjIntBox(A a, int b) {
+            super(a);
             this.b = b;
         }
+
+        @Override
+        public Integer getKey() {
+            return b;
+        }
+
+        @Override
+        public A getValue() {
+            return a;
+        }
+
+        @Override
+        public A setValue(A value) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int hashCode() {
+            return Integer.hashCode(b) ^ (a == null ? 0 : a.hashCode());
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Map.Entry))
+                return false;
+            Map.Entry<?,?> e = (Map.Entry<?,?>)o;
+            return getKey().equals(e.getKey()) && Objects.equals(a, e.getValue());
+        }
+
+        @Override
+        public String toString() {
+            return b + "=" + a;
+        }
+    }
+    
+    static final class ObjLongBox<A> extends Box<A> implements Entry<A, Long> {
+        long b;
+        
+        ObjLongBox(A a, long b) {
+            super(a);
+            this.b = b;
+        }
+
+        @Override
+        public A getKey() {
+            return a;
+        }
+
+        @Override
+        public Long getValue() {
+            return b;
+        }
+
+        @Override
+        public Long setValue(Long value) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int hashCode() {
+            return Long.hashCode(b) ^ (a == null ? 0 : a.hashCode());
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Map.Entry))
+                return false;
+            Map.Entry<?,?> e = (Map.Entry<?,?>)o;
+            return getValue().equals(e.getValue()) && Objects.equals(a, e.getKey());
+        }
+
+        @Override
+        public String toString() {
+            return a + "=" + b;
+        }
+    }
+
+    static final class ObjDoubleBox<A> extends Box<A> {
+        double b;
+        
+        ObjDoubleBox(A a, double b) {
+            super(a);
+            this.b = b;
+        }
+    }
+    
+    static ObjIntConsumer<StringBuilder> joinAccumulatorInt(CharSequence delimiter) {
+        return (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i);
+    }
+
+    static ObjLongConsumer<StringBuilder> joinAccumulatorLong(CharSequence delimiter) {
+        return (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i);
+    }
+
+    static ObjDoubleConsumer<StringBuilder> joinAccumulatorDouble(CharSequence delimiter) {
+        return (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i);
     }
 
     static BiConsumer<StringBuilder, StringBuilder> joinMerger(CharSequence delimiter) {
@@ -575,16 +691,20 @@ import java.util.stream.Stream;
         };
     }
 
-    static IntStreamEx intStreamForLength(int a, int b) {
+    static <T> BinaryOperator<T> selectFirst() {
+        return (u, v) -> u;
+    }
+    
+    static int checkLength(int a, int b) {
         if (a != b)
             throw new IllegalArgumentException("Length differs: " + a + " != " + b);
-        return IntStreamEx.range(0, a);
+        return a;
     }
 
     static void rangeCheck(int arrayLength, int startInclusive, int endExclusive) {
         if (startInclusive > endExclusive) {
             throw new ArrayIndexOutOfBoundsException("startInclusive(" + startInclusive + ") > endExclusive("
-                    + endExclusive + ")");
+                + endExclusive + ")");
         }
         if (startInclusive < 0) {
             throw new ArrayIndexOutOfBoundsException(startInclusive);
@@ -604,5 +724,10 @@ import java.util.stream.Stream;
     @SuppressWarnings("unchecked")
     static <T> Stream<T> unwrap(Stream<T> stream) {
         return stream instanceof AbstractStreamEx ? ((AbstractStreamEx<T, ?>) stream).stream : stream;
+    }
+    
+    @SuppressWarnings("unchecked")
+    static <T> T none() {
+        return (T)NONE;
     }
 }

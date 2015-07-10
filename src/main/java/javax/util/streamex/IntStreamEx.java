@@ -22,11 +22,13 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.IntSummaryStatistics;
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Random;
 import java.util.Map.Entry;
 import java.util.PrimitiveIterator.OfInt;
+import java.util.Spliterator;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiConsumer;
 import java.util.function.DoublePredicate;
@@ -85,28 +87,11 @@ public class IntStreamEx implements IntStream {
         return intermediate;
     }
 
-    /**
-     * Returns whether this stream, if a terminal operation were to be executed,
-     * would execute in parallel. Calling this method after invoking an terminal
-     * stream operation method may yield unpredictable results.
-     *
-     * @return {@code true} if this stream would execute in parallel if executed
-     */
     @Override
     public boolean isParallel() {
         return stream.isParallel();
     }
 
-    /**
-     * Returns an equivalent stream that is unordered. May return itself, either
-     * because the stream was already unordered, or because the underlying
-     * stream state was modified to be unordered.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @return an unordered stream
-     */
     @Override
     public IntStreamEx unordered() {
         return strategy().newIntStreamEx(stream.unordered());
@@ -117,12 +102,6 @@ public class IntStreamEx implements IntStream {
         return strategy().newIntStreamEx(stream.onClose(closeHandler));
     }
 
-    /**
-     * Closes this stream, causing all close handlers for this stream pipeline
-     * to be called.
-     *
-     * @see AutoCloseable#close()
-     */
     @Override
     public void close() {
         stream.close();
@@ -131,482 +110,6 @@ public class IntStreamEx implements IntStream {
     @Override
     public IntStreamEx filter(IntPredicate predicate) {
         return strategy().newIntStreamEx(stream.filter(predicate));
-    }
-
-    /**
-     * Returns an {@link IntStreamEx} consisting of the results of applying the
-     * given function to the elements of this stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     * @return the new stream
-     */
-    @Override
-    public IntStreamEx map(IntUnaryOperator mapper) {
-        return strategy().newIntStreamEx(stream.map(mapper));
-    }
-
-    /**
-     * Returns an object-valued {@link StreamEx} consisting of the results of
-     * applying the given function to the elements of this stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param <U>
-     *            the element type of the new stream
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     * @return the new stream
-     */
-    @Override
-    public <U> StreamEx<U> mapToObj(IntFunction<? extends U> mapper) {
-        return strategy().newStreamEx(stream.mapToObj(mapper));
-    }
-
-    /**
-     * Returns a {@link LongStreamEx} consisting of the results of applying the
-     * given function to the elements of this stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     * @return the new stream
-     */
-    @Override
-    public LongStreamEx mapToLong(IntToLongFunction mapper) {
-        return strategy().newLongStreamEx(stream.mapToLong(mapper));
-    }
-
-    /**
-     * Returns a {@link DoubleStreamEx} consisting of the results of applying
-     * the given function to the elements of this stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     * @return the new stream
-     */
-    @Override
-    public DoubleStreamEx mapToDouble(IntToDoubleFunction mapper) {
-        return strategy().newDoubleStreamEx(stream.mapToDouble(mapper));
-    }
-    
-    /**
-     * Returns an {@link EntryStream} consisting of the {@link Entry} objects
-     * which keys and values are results of applying the given functions to the
-     * elements of this stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param <K>
-     *            The {@code Entry} key type
-     * @param <V>
-     *            The {@code Entry} value type
-     * @param keyMapper
-     *            a non-interfering, stateless function to apply to each element
-     * @param valueMapper
-     *            a non-interfering, stateless function to apply to each element
-     * @return the new stream
-     * @since 0.3.1
-     */
-    public <K, V> EntryStream<K, V> mapToEntry(IntFunction<? extends K> keyMapper, IntFunction<? extends V> valueMapper) {
-        return strategy().newEntryStream(
-                stream.mapToObj(t -> new AbstractMap.SimpleImmutableEntry<>(keyMapper.apply(t), valueMapper.apply(t))));
-    }
-
-    /**
-     * Returns an {@link IntStreamEx} consisting of the results of replacing
-     * each element of this stream with the contents of a mapped stream produced
-     * by applying the provided mapping function to each element. Each mapped
-     * stream is closed after its contents have been placed into this stream.
-     * (If a mapped stream is {@code null} an empty stream is used, instead.)
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     *            which produces an {@code IntStream} of new values
-     * @return the new stream
-     */
-    @Override
-    public IntStreamEx flatMap(IntFunction<? extends IntStream> mapper) {
-        return strategy().newIntStreamEx(stream.flatMap(mapper));
-    }
-
-    /**
-     * Returns a {@link LongStreamEx} consisting of the results of replacing
-     * each element of this stream with the contents of a mapped stream produced
-     * by applying the provided mapping function to each element. Each mapped
-     * stream is closed after its contents have been placed into this stream.
-     * (If a mapped stream is {@code null} an empty stream is used, instead.)
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     *            which produces a {@code LongStream} of new values
-     * @return the new stream
-     * @since 0.3.0
-     */
-    public LongStreamEx flatMapToLong(IntFunction<? extends LongStream> mapper) {
-        return strategy().newLongStreamEx(stream.mapToObj(mapper).flatMapToLong(Function.identity()));
-    }
-
-    /**
-     * Returns a {@link DoubleStreamEx} consisting of the results of replacing
-     * each element of this stream with the contents of a mapped stream produced
-     * by applying the provided mapping function to each element. Each mapped
-     * stream is closed after its contents have been placed into this stream.
-     * (If a mapped stream is {@code null} an empty stream is used, instead.)
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     *            which produces a {@code DoubleStream} of new values
-     * @return the new stream
-     * @since 0.3.0
-     */
-    public DoubleStreamEx flatMapToDouble(IntFunction<? extends DoubleStream> mapper) {
-        return strategy().newDoubleStreamEx(stream.mapToObj(mapper).flatMapToDouble(Function.identity()));
-    }
-
-    /**
-     * Returns a {@link StreamEx} consisting of the results of replacing each
-     * element of this stream with the contents of a mapped stream produced by
-     * applying the provided mapping function to each element. Each mapped
-     * stream is closed after its contents have been placed into this stream.
-     * (If a mapped stream is {@code null} an empty stream is used, instead.)
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param <R>
-     *            The element type of the new stream
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     *            which produces a {@code Stream} of new values
-     * @return the new stream
-     * @since 0.3.0
-     */
-    public <R> StreamEx<R> flatMapToObj(IntFunction<? extends Stream<R>> mapper) {
-        return strategy().newStreamEx(stream.mapToObj(mapper).flatMap(Function.identity()));
-    }
-
-    @Override
-    public IntStreamEx distinct() {
-        return strategy().newIntStreamEx(stream.distinct());
-    }
-
-    /**
-     * Returns a stream consisting of the elements of this stream in sorted
-     * order.
-     *
-     * <p>
-     * This is a stateful intermediate operation.
-     *
-     * @return the new stream
-     */
-    @Override
-    public IntStreamEx sorted() {
-        return strategy().newIntStreamEx(stream.sorted());
-    }
-
-    @Override
-    public IntStreamEx peek(IntConsumer action) {
-        return strategy().newIntStreamEx(stream.peek(action));
-    }
-
-    @Override
-    public IntStreamEx limit(long maxSize) {
-        return strategy().newIntStreamEx(stream.limit(maxSize));
-    }
-
-    @Override
-    public IntStreamEx skip(long n) {
-        return strategy().newIntStreamEx(stream.skip(n));
-    }
-
-    @Override
-    public void forEach(IntConsumer action) {
-        stream.forEach(action);
-    }
-
-    @Override
-    public void forEachOrdered(IntConsumer action) {
-        stream.forEachOrdered(action);
-    }
-
-    /**
-     * Returns an array containing the elements of this stream.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return an array containing the elements of this stream
-     */
-    @Override
-    public int[] toArray() {
-        return stream.toArray();
-    }
-
-    @Override
-    public int reduce(int identity, IntBinaryOperator op) {
-        return stream.reduce(identity, op);
-    }
-
-    @Override
-    public OptionalInt reduce(IntBinaryOperator op) {
-        return stream.reduce(op);
-    }
-
-    /**
-     * Performs a mutable reduction operation on the elements of this stream. A
-     * mutable reduction is one in which the reduced value is a mutable result
-     * container, such as an {@code ArrayList}, and elements are incorporated by
-     * updating the state of the result rather than by replacing the result.
-     *
-     * <p>
-     * Like {@link #reduce(int, IntBinaryOperator)}, {@code collect} operations
-     * can be parallelized without requiring additional synchronization.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @param <R>
-     *            type of the result
-     * @param supplier
-     *            a function that creates a new result container. For a parallel
-     *            execution, this function may be called multiple times and must
-     *            return a fresh value each time.
-     * @param accumulator
-     *            an associative, non-interfering, stateless function for
-     *            incorporating an additional element into a result
-     * @param combiner
-     *            an associative, non-interfering, stateless function for
-     *            combining two values, which must be compatible with the
-     *            accumulator function
-     * @return the result of the reduction
-     * @see #collect(IntCollector)
-     */
-    @Override
-    public <R> R collect(Supplier<R> supplier, ObjIntConsumer<R> accumulator, BiConsumer<R, R> combiner) {
-        return stream.collect(supplier, accumulator, combiner);
-    }
-
-    /**
-     * Performs a mutable reduction operation on the elements of this stream
-     * using an {@link IntCollector} which encapsulates the supplier,
-     * accumulator and merger functions making easier to reuse collection
-     * strategies.
-     *
-     * <p>
-     * Like {@link #reduce(int, IntBinaryOperator)}, {@code collect} operations
-     * can be parallelized without requiring additional synchronization.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @param <A>
-     *            the intermediate accumulation type of the {@code IntCollector}
-     * @param <R>
-     *            type of the result
-     * @param collector
-     *            the {@code IntCollector} describing the reduction
-     * @return the result of the reduction
-     * @see #collect(Supplier, ObjIntConsumer, BiConsumer)
-     * @since 0.3.0
-     */
-    @SuppressWarnings("unchecked")
-    public <A, R> R collect(IntCollector<A, R> collector) {
-        if (collector.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH))
-            return (R) collect(collector.supplier(), collector.intAccumulator(), collector.merger());
-        return collector.finisher()
-                .apply(collect(collector.supplier(), collector.intAccumulator(), collector.merger()));
-    }
-
-    @Override
-    public int sum() {
-        return reduce(0, Integer::sum);
-    }
-
-    @Override
-    public OptionalInt min() {
-        return reduce(Integer::min);
-    }
-
-    @Override
-    public OptionalInt max() {
-        return reduce(Integer::max);
-    }
-
-    /**
-     * Returns the count of elements in this stream.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return the count of elements in this stream
-     */
-    @Override
-    public long count() {
-        return stream.count();
-    }
-
-    @Override
-    public OptionalDouble average() {
-        return stream.average();
-    }
-
-    @Override
-    public IntSummaryStatistics summaryStatistics() {
-        return collect(IntSummaryStatistics::new, IntSummaryStatistics::accept, IntSummaryStatistics::combine);
-    }
-
-    @Override
-    public boolean anyMatch(IntPredicate predicate) {
-        return stream.anyMatch(predicate);
-    }
-
-    @Override
-    public boolean allMatch(IntPredicate predicate) {
-        return stream.allMatch(predicate);
-    }
-
-    @Override
-    public boolean noneMatch(IntPredicate predicate) {
-        return !anyMatch(predicate);
-    }
-
-    @Override
-    public OptionalInt findFirst() {
-        return stream.findFirst();
-    }
-
-    @Override
-    public OptionalInt findAny() {
-        return stream.findAny();
-    }
-
-    @Override
-    public LongStreamEx asLongStream() {
-        return strategy().newLongStreamEx(stream.asLongStream());
-    }
-
-    @Override
-    public DoubleStreamEx asDoubleStream() {
-        return strategy().newDoubleStreamEx(stream.asDoubleStream());
-    }
-
-    @Override
-    public StreamEx<Integer> boxed() {
-        return strategy().newStreamEx(stream.boxed());
-    }
-
-    @Override
-    public IntStreamEx sequential() {
-        return StreamFactory.DEFAULT.newIntStreamEx(stream.sequential());
-    }
-
-    /**
-     * Returns an equivalent stream that is parallel. May return itself, either
-     * because the stream was already parallel, or because the underlying stream
-     * state was modified to be parallel.
-     *
-     * <p>
-     * This is an intermediate operation.
-     * 
-     * <p>
-     * If this stream was created using {@link #parallel(ForkJoinPool)}, the new
-     * stream forgets about supplied custom {@link ForkJoinPool} and its
-     * terminal operation will be executed in common pool.
-     *
-     * @return a parallel stream
-     */
-    @Override
-    public IntStreamEx parallel() {
-        return StreamFactory.DEFAULT.newIntStreamEx(stream.parallel());
-    }
-
-    /**
-     * Returns an equivalent stream that is parallel and bound to the supplied
-     * {@link ForkJoinPool}.
-     *
-     * <p>
-     * This is an intermediate operation.
-     * 
-     * <p>
-     * The terminal operation of this stream or any derived stream (except the
-     * streams created via {@link #parallel()} or {@link #sequential()} methods)
-     * will be executed inside the supplied {@code ForkJoinPool}. If current
-     * thread does not belong to that pool, it will wait till calculation
-     * finishes.
-     *
-     * @param fjp
-     *            a {@code ForkJoinPool} to submit the stream operation to.
-     * @return a parallel stream bound to the supplied {@code ForkJoinPool}
-     * @since 0.2.0
-     */
-    public IntStreamEx parallel(ForkJoinPool fjp) {
-        return StreamFactory.forCustomPool(fjp).newIntStreamEx(stream.parallel());
-    }
-
-    @Override
-    public OfInt iterator() {
-        return stream.iterator();
-    }
-
-    @Override
-    public java.util.Spliterator.OfInt spliterator() {
-        return stream.spliterator();
-    }
-
-    /**
-     * Returns a new {@code IntStreamEx} which is a concatenation of this stream
-     * and the stream containing supplied values
-     * 
-     * @param values
-     *            the values to append to the stream
-     * @return the new stream
-     */
-    public IntStreamEx append(int... values) {
-        if (values.length == 0)
-            return this;
-        return strategy().newIntStreamEx(IntStream.concat(stream, IntStream.of(values)));
-    }
-
-    public IntStreamEx append(IntStream other) {
-        return strategy().newIntStreamEx(IntStream.concat(stream, other));
-    }
-
-    /**
-     * Returns a new {@code IntStreamEx} which is a concatenation of the stream
-     * containing supplied values and this stream
-     * 
-     * @param values
-     *            the values to prepend to the stream
-     * @return the new stream
-     */
-    public IntStreamEx prepend(int... values) {
-        if (values.length == 0)
-            return this;
-        return strategy().newIntStreamEx(IntStream.concat(IntStream.of(values), stream));
-    }
-
-    public IntStreamEx prepend(IntStream other) {
-        return strategy().newIntStreamEx(IntStream.concat(other, stream));
     }
 
     /**
@@ -623,14 +126,6 @@ public class IntStreamEx implements IntStream {
      */
     public IntStreamEx remove(IntPredicate predicate) {
         return filter(predicate.negate());
-    }
-
-    public OptionalInt findAny(IntPredicate predicate) {
-        return filter(predicate).findAny();
-    }
-
-    public OptionalInt findFirst(IntPredicate predicate) {
-        return filter(predicate).findFirst();
     }
 
     /**
@@ -728,6 +223,127 @@ public class IntStreamEx implements IntStream {
         return filter(val -> val <= value);
     }
 
+    @Override
+    public IntStreamEx map(IntUnaryOperator mapper) {
+        return strategy().newIntStreamEx(stream.map(mapper));
+    }
+
+    @Override
+    public <U> StreamEx<U> mapToObj(IntFunction<? extends U> mapper) {
+        return strategy().newStreamEx(stream.mapToObj(mapper));
+    }
+
+    @Override
+    public LongStreamEx mapToLong(IntToLongFunction mapper) {
+        return strategy().newLongStreamEx(stream.mapToLong(mapper));
+    }
+
+    @Override
+    public DoubleStreamEx mapToDouble(IntToDoubleFunction mapper) {
+        return strategy().newDoubleStreamEx(stream.mapToDouble(mapper));
+    }
+
+    /**
+     * Returns an {@link EntryStream} consisting of the {@link Entry} objects
+     * which keys and values are results of applying the given functions to the
+     * elements of this stream.
+     *
+     * <p>
+     * This is an intermediate operation.
+     *
+     * @param <K>
+     *            The {@code Entry} key type
+     * @param <V>
+     *            The {@code Entry} value type
+     * @param keyMapper
+     *            a non-interfering, stateless function to apply to each element
+     * @param valueMapper
+     *            a non-interfering, stateless function to apply to each element
+     * @return the new stream
+     * @since 0.3.1
+     */
+    public <K, V> EntryStream<K, V> mapToEntry(IntFunction<? extends K> keyMapper, IntFunction<? extends V> valueMapper) {
+        return strategy().newEntryStream(
+            stream.mapToObj(t -> new AbstractMap.SimpleImmutableEntry<>(keyMapper.apply(t), valueMapper.apply(t))));
+    }
+
+    @Override
+    public IntStreamEx flatMap(IntFunction<? extends IntStream> mapper) {
+        return strategy().newIntStreamEx(stream.flatMap(mapper));
+    }
+
+    /**
+     * Returns a {@link LongStreamEx} consisting of the results of replacing
+     * each element of this stream with the contents of a mapped stream produced
+     * by applying the provided mapping function to each element. Each mapped
+     * stream is closed after its contents have been placed into this stream.
+     * (If a mapped stream is {@code null} an empty stream is used, instead.)
+     *
+     * <p>
+     * This is an intermediate operation.
+     *
+     * @param mapper
+     *            a non-interfering, stateless function to apply to each element
+     *            which produces a {@code LongStream} of new values
+     * @return the new stream
+     * @since 0.3.0
+     */
+    public LongStreamEx flatMapToLong(IntFunction<? extends LongStream> mapper) {
+        return strategy().newLongStreamEx(stream.mapToObj(mapper).flatMapToLong(Function.identity()));
+    }
+
+    /**
+     * Returns a {@link DoubleStreamEx} consisting of the results of replacing
+     * each element of this stream with the contents of a mapped stream produced
+     * by applying the provided mapping function to each element. Each mapped
+     * stream is closed after its contents have been placed into this stream.
+     * (If a mapped stream is {@code null} an empty stream is used, instead.)
+     *
+     * <p>
+     * This is an intermediate operation.
+     *
+     * @param mapper
+     *            a non-interfering, stateless function to apply to each element
+     *            which produces a {@code DoubleStream} of new values
+     * @return the new stream
+     * @since 0.3.0
+     */
+    public DoubleStreamEx flatMapToDouble(IntFunction<? extends DoubleStream> mapper) {
+        return strategy().newDoubleStreamEx(stream.mapToObj(mapper).flatMapToDouble(Function.identity()));
+    }
+
+    /**
+     * Returns a {@link StreamEx} consisting of the results of replacing each
+     * element of this stream with the contents of a mapped stream produced by
+     * applying the provided mapping function to each element. Each mapped
+     * stream is closed after its contents have been placed into this stream.
+     * (If a mapped stream is {@code null} an empty stream is used, instead.)
+     *
+     * <p>
+     * This is an intermediate operation.
+     *
+     * @param <R>
+     *            The element type of the new stream
+     * @param mapper
+     *            a non-interfering, stateless function to apply to each element
+     *            which produces a {@code Stream} of new values
+     * @return the new stream
+     * @since 0.3.0
+     */
+    public <R> StreamEx<R> flatMapToObj(IntFunction<? extends Stream<R>> mapper) {
+        return strategy().newStreamEx(stream.mapToObj(mapper).flatMap(Function.identity()));
+    }
+
+    @Override
+    public IntStreamEx distinct() {
+        return strategy().newIntStreamEx(stream.distinct());
+    }
+
+    @Override
+    public IntStreamEx sorted() {
+        return strategy().newIntStreamEx(stream.sorted());
+    }
+
     public IntStreamEx sorted(Comparator<Integer> comparator) {
         return strategy().newIntStreamEx(stream.boxed().sorted(comparator).mapToInt(Integer::intValue));
     }
@@ -743,23 +359,293 @@ public class IntStreamEx implements IntStream {
      * @since 0.0.8
      */
     public IntStreamEx reverseSorted() {
-        return sorted((a, b) -> b.compareTo(a));
+        return sorted(Comparator.reverseOrder());
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the natural order of the keys extracted by provided
+     * function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param <V>
+     *            the type of the {@code Comparable} sort key
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public <V extends Comparable<? super V>> IntStreamEx sortedBy(IntFunction<V> keyExtractor) {
         return sorted(Comparator.comparing(i -> keyExtractor.apply(i)));
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the int values extracted by provided function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public IntStreamEx sortedByInt(IntUnaryOperator keyExtractor) {
         return sorted(Comparator.comparingInt(i -> keyExtractor.applyAsInt(i)));
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the long values extracted by provided function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public IntStreamEx sortedByLong(IntToLongFunction keyExtractor) {
         return sorted(Comparator.comparingLong(i -> keyExtractor.applyAsLong(i)));
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the double values extracted by provided function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public IntStreamEx sortedByDouble(IntToDoubleFunction keyExtractor) {
         return sorted(Comparator.comparingDouble(i -> keyExtractor.applyAsDouble(i)));
+    }
+
+    @Override
+    public IntStreamEx peek(IntConsumer action) {
+        return strategy().newIntStreamEx(stream.peek(action));
+    }
+
+    @Override
+    public IntStreamEx limit(long maxSize) {
+        return strategy().newIntStreamEx(stream.limit(maxSize));
+    }
+
+    @Override
+    public IntStreamEx skip(long n) {
+        return strategy().newIntStreamEx(stream.skip(n));
+    }
+
+    /**
+     * Returns a stream consisting of the remaining elements of this stream
+     * after discarding the first {@code n} elements of the stream. If this
+     * stream contains fewer than {@code n} elements then an empty stream will
+     * be returned.
+     *
+     * <p>
+     * This is a stateful quasi-intermediate operation. Unlike
+     * {@link #skip(long)} it skips the first elements even if the stream is
+     * unordered. The main purpose of this method is to workaround the problem
+     * of skipping the first elements from non-sized source with further
+     * parallel processing and unordered terminal operation (such as
+     * {@link #forEach(IntConsumer)}). Also it behaves much better with infinite
+     * streams processed in parallel. For example,
+     * {@code IntStreamEx.iterate(0, i->i+1).skip(1).limit(100).parallel().toArray()}
+     * will likely to fail with {@code OutOfMemoryError}, but will work nicely
+     * if {@code skip} is replaced with {@code skipOrdered}.
+     *
+     * <p>
+     * For sequential streams this method behaves exactly like
+     * {@link #skip(long)}.
+     *
+     * @param n
+     *            the number of leading elements to skip
+     * @return the new stream
+     * @throws IllegalArgumentException
+     *             if {@code n} is negative
+     * @see #skip(long)
+     * @since 0.3.2
+     */
+    public IntStreamEx skipOrdered(long n) {
+        IntStream result = stream.isParallel() ? StreamSupport.intStream(
+            StreamSupport.intStream(stream.spliterator(), false).skip(n).spliterator(), true) : StreamSupport
+                .intStream(stream.skip(n).spliterator(), false);
+        return strategy().newIntStreamEx(result.onClose(stream::close));
+    }
+
+    @Override
+    public void forEach(IntConsumer action) {
+        stream.forEach(action);
+    }
+
+    @Override
+    public void forEachOrdered(IntConsumer action) {
+        stream.forEachOrdered(action);
+    }
+
+    @Override
+    public int[] toArray() {
+        return stream.toArray();
+    }
+
+    /**
+     * Returns a {@code byte[]} array containing the elements of this stream
+     * which are converted to bytes using {@code (byte)} cast operation.
+     *
+     * <p>
+     * This is a terminal operation.
+     *
+     * @return an array containing the elements of this stream
+     * @since 0.3.0
+     */
+    public byte[] toByteArray() {
+        return collectSized(ByteBuffer::new, ByteBuffer::add, ByteBuffer::addAll, ByteBuffer::new,
+            ByteBuffer::addUnsafe).toArray();
+    }
+
+    /**
+     * Returns a {@code char[]} array containing the elements of this stream
+     * which are converted to chars using {@code (char)} cast operation.
+     *
+     * <p>
+     * This is a terminal operation.
+     *
+     * @return an array containing the elements of this stream
+     * @since 0.3.0
+     */
+    public char[] toCharArray() {
+        return collectSized(CharBuffer::new, CharBuffer::add, CharBuffer::addAll, CharBuffer::new,
+            CharBuffer::addUnsafe).toArray();
+    }
+
+    /**
+     * Returns a {@code short[]} array containing the elements of this stream
+     * which are converted to shorts using {@code (short)} cast operation.
+     *
+     * <p>
+     * This is a terminal operation.
+     *
+     * @return an array containing the elements of this stream
+     * @since 0.3.0
+     */
+    public short[] toShortArray() {
+        return collectSized(ShortBuffer::new, ShortBuffer::add, ShortBuffer::addAll, ShortBuffer::new,
+            ShortBuffer::addUnsafe).toArray();
+    }
+
+    /**
+     * Returns a {@link BitSet} containing the elements of this stream.
+     *
+     * <p>
+     * This is a terminal operation.
+     *
+     * @return a {@code BitSet} which set bits correspond to the elements of
+     *         this stream.
+     * @since 0.2.0
+     */
+    public BitSet toBitSet() {
+        return collect(BitSet::new, BitSet::set, BitSet::or);
+    }
+
+    @Override
+    public int reduce(int identity, IntBinaryOperator op) {
+        return stream.reduce(identity, op);
+    }
+
+    @Override
+    public OptionalInt reduce(IntBinaryOperator op) {
+        return stream.reduce(op);
+    }
+
+    /**
+     * {@inheritDoc}
+     * 
+     * @see #collect(IntCollector)
+     */
+    @Override
+    public <R> R collect(Supplier<R> supplier, ObjIntConsumer<R> accumulator, BiConsumer<R, R> combiner) {
+        return stream.collect(supplier, accumulator, combiner);
+    }
+
+    /**
+     * Performs a mutable reduction operation on the elements of this stream
+     * using an {@link IntCollector} which encapsulates the supplier,
+     * accumulator and merger functions making easier to reuse collection
+     * strategies.
+     *
+     * <p>
+     * Like {@link #reduce(int, IntBinaryOperator)}, {@code collect} operations
+     * can be parallelized without requiring additional synchronization.
+     *
+     * <p>
+     * This is a terminal operation.
+     *
+     * @param <A>
+     *            the intermediate accumulation type of the {@code IntCollector}
+     * @param <R>
+     *            type of the result
+     * @param collector
+     *            the {@code IntCollector} describing the reduction
+     * @return the result of the reduction
+     * @see #collect(Supplier, ObjIntConsumer, BiConsumer)
+     * @since 0.3.0
+     */
+    @SuppressWarnings("unchecked")
+    public <A, R> R collect(IntCollector<A, R> collector) {
+        if (collector.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH))
+            return (R) collect(collector.supplier(), collector.intAccumulator(), collector.merger());
+        return collector.finisher()
+                .apply(collect(collector.supplier(), collector.intAccumulator(), collector.merger()));
+    }
+
+    @Override
+    public int sum() {
+        return reduce(0, Integer::sum);
+    }
+
+    @Override
+    public OptionalInt min() {
+        return reduce(Integer::min);
     }
 
     /**
@@ -797,7 +683,19 @@ public class IntStreamEx implements IntStream {
      * @since 0.1.2
      */
     public <V extends Comparable<? super V>> OptionalInt minBy(IntFunction<V> keyExtractor) {
-        return reduce((a, b) -> keyExtractor.apply(a).compareTo(keyExtractor.apply(b)) > 0 ? b : a);
+        ObjIntBox<V> result = collect(() -> new ObjIntBox<>(null, 0), (box, i) -> {
+            V val = Objects.requireNonNull(keyExtractor.apply(i));
+            if (box.a == null || box.a.compareTo(val) > 0) {
+                box.a = val;
+                box.b = i;
+            }
+        }, (box1, box2) -> {
+            if (box2.a != null && (box1.a == null || box1.a.compareTo(box2.a) > 0)) {
+                box1.a = box2.a;
+                box1.b = box2.b;
+            }
+        });
+        return result.a == null ? OptionalInt.empty() : OptionalInt.of(result.b);
     }
 
     /**
@@ -809,13 +707,13 @@ public class IntStreamEx implements IntStream {
      *
      * @param keyExtractor
      *            a non-interfering, stateless function
-     * @return an {@code OptionalInt} describing some element of this stream for
-     *         which the lowest value was returned by key extractor, or an empty
-     *         {@code OptionalInt} if the stream is empty
+     * @return an {@code OptionalInt} describing the first element of this
+     *         stream for which the lowest value was returned by key extractor,
+     *         or an empty {@code OptionalInt} if the stream is empty
      * @since 0.1.2
      */
     public OptionalInt minByInt(IntUnaryOperator keyExtractor) {
-        return reduce((a, b) -> Integer.compare(keyExtractor.applyAsInt(a), keyExtractor.applyAsInt(b)) > 0 ? b : a);
+        return reduce((a, b) -> Integer.compare(keyExtractor.applyAsInt(a), keyExtractor.applyAsInt(b)) <= 0 ? a : b);
     }
 
     /**
@@ -855,6 +753,11 @@ public class IntStreamEx implements IntStream {
                 : a);
     }
 
+    @Override
+    public OptionalInt max() {
+        return reduce(Integer::max);
+    }
+
     /**
      * Returns the maximum element of this stream according to the provided
      * {@code Comparator}.
@@ -865,11 +768,11 @@ public class IntStreamEx implements IntStream {
      * @param comparator
      *            a non-interfering, stateless {@link Comparator} to compare
      *            elements of this stream
-     * @return an {@code OptionalInt} describing the minimum element of this
+     * @return an {@code OptionalInt} describing the maximum element of this
      *         stream, or an empty {@code OptionalInt} if the stream is empty
      */
     public OptionalInt max(Comparator<Integer> comparator) {
-        return reduce((a, b) -> comparator.compare(a, b) > 0 ? a : b);
+        return reduce((a, b) -> comparator.compare(a, b) >= 0 ? a : b);
     }
 
     /**
@@ -883,13 +786,25 @@ public class IntStreamEx implements IntStream {
      *            the type of the {@code Comparable} sort key
      * @param keyExtractor
      *            a non-interfering, stateless function
-     * @return an {@code OptionalInt} describing some element of this stream for
-     *         which the highest value was returned by key extractor, or an
-     *         empty {@code OptionalInt} if the stream is empty
+     * @return an {@code OptionalInt} describing the first element of this
+     *         stream for which the highest value was returned by key extractor,
+     *         or an empty {@code OptionalInt} if the stream is empty
      * @since 0.1.2
      */
     public <V extends Comparable<? super V>> OptionalInt maxBy(IntFunction<V> keyExtractor) {
-        return reduce((a, b) -> keyExtractor.apply(a).compareTo(keyExtractor.apply(b)) > 0 ? a : b);
+        ObjIntBox<V> result = collect(() -> new ObjIntBox<>(null, 0), (box, i) -> {
+            V val = Objects.requireNonNull(keyExtractor.apply(i));
+            if (box.a == null || box.a.compareTo(val) < 0) {
+                box.a = val;
+                box.b = i;
+            }
+        }, (box1, box2) -> {
+            if (box2.a != null && (box1.a == null || box1.a.compareTo(box2.a) < 0)) {
+                box1.a = box2.a;
+                box1.b = box2.b;
+            }
+        });
+        return result.a == null ? OptionalInt.empty() : OptionalInt.of(result.b);
     }
 
     /**
@@ -901,13 +816,13 @@ public class IntStreamEx implements IntStream {
      *
      * @param keyExtractor
      *            a non-interfering, stateless function
-     * @return an {@code OptionalInt} describing some element of this stream for
-     *         which the highest value was returned by key extractor, or an
-     *         empty {@code OptionalInt} if the stream is empty
+     * @return an {@code OptionalInt} describing the first element of this
+     *         stream for which the highest value was returned by key extractor,
+     *         or an empty {@code OptionalInt} if the stream is empty
      * @since 0.1.2
      */
     public OptionalInt maxByInt(IntUnaryOperator keyExtractor) {
-        return reduce((a, b) -> Integer.compare(keyExtractor.applyAsInt(a), keyExtractor.applyAsInt(b)) > 0 ? a : b);
+        return reduce((a, b) -> Integer.compare(keyExtractor.applyAsInt(a), keyExtractor.applyAsInt(b)) >= 0 ? a : b);
     }
 
     /**
@@ -919,13 +834,13 @@ public class IntStreamEx implements IntStream {
      *
      * @param keyExtractor
      *            a non-interfering, stateless function
-     * @return an {@code OptionalInt} describing some element of this stream for
-     *         which the highest value was returned by key extractor, or an
-     *         empty {@code OptionalInt} if the stream is empty
+     * @return an {@code OptionalInt} describing the first element of this
+     *         stream for which the highest value was returned by key extractor,
+     *         or an empty {@code OptionalInt} if the stream is empty
      * @since 0.1.2
      */
     public OptionalInt maxByLong(IntToLongFunction keyExtractor) {
-        return reduce((a, b) -> Long.compare(keyExtractor.applyAsLong(a), keyExtractor.applyAsLong(b)) > 0 ? a : b);
+        return reduce((a, b) -> Long.compare(keyExtractor.applyAsLong(a), keyExtractor.applyAsLong(b)) >= 0 ? a : b);
     }
 
     /**
@@ -937,14 +852,164 @@ public class IntStreamEx implements IntStream {
      *
      * @param keyExtractor
      *            a non-interfering, stateless function
-     * @return an {@code OptionalInt} describing some element of this stream for
+     * @return an {@code OptionalInt} describing the first element of this stream for
      *         which the highest value was returned by key extractor, or an
      *         empty {@code OptionalInt} if the stream is empty
      * @since 0.1.2
      */
     public OptionalInt maxByDouble(IntToDoubleFunction keyExtractor) {
-        return reduce((a, b) -> Double.compare(keyExtractor.applyAsDouble(a), keyExtractor.applyAsDouble(b)) > 0 ? a
+        return reduce((a, b) -> Double.compare(keyExtractor.applyAsDouble(a), keyExtractor.applyAsDouble(b)) >= 0 ? a
                 : b);
+    }
+
+    @Override
+    public long count() {
+        return stream.count();
+    }
+
+    @Override
+    public OptionalDouble average() {
+        return stream.average();
+    }
+
+    @Override
+    public IntSummaryStatistics summaryStatistics() {
+        return collect(IntSummaryStatistics::new, IntSummaryStatistics::accept, IntSummaryStatistics::combine);
+    }
+
+    @Override
+    public boolean anyMatch(IntPredicate predicate) {
+        return stream.anyMatch(predicate);
+    }
+
+    @Override
+    public boolean allMatch(IntPredicate predicate) {
+        return stream.allMatch(predicate);
+    }
+
+    @Override
+    public boolean noneMatch(IntPredicate predicate) {
+        return !anyMatch(predicate);
+    }
+
+    @Override
+    public OptionalInt findFirst() {
+        return stream.findFirst();
+    }
+
+    public OptionalInt findFirst(IntPredicate predicate) {
+        return filter(predicate).findFirst();
+    }
+
+    @Override
+    public OptionalInt findAny() {
+        return stream.findAny();
+    }
+
+    public OptionalInt findAny(IntPredicate predicate) {
+        return filter(predicate).findAny();
+    }
+
+    @Override
+    public LongStreamEx asLongStream() {
+        return strategy().newLongStreamEx(stream.asLongStream());
+    }
+
+    @Override
+    public DoubleStreamEx asDoubleStream() {
+        return strategy().newDoubleStreamEx(stream.asDoubleStream());
+    }
+
+    @Override
+    public StreamEx<Integer> boxed() {
+        return strategy().newStreamEx(stream.boxed());
+    }
+
+    @Override
+    public IntStreamEx sequential() {
+        return StreamFactory.DEFAULT.newIntStreamEx(stream.sequential());
+    }
+
+    /**
+     * {@inheritDoc}
+     * 
+     * <p>
+     * If this stream was created using {@link #parallel(ForkJoinPool)}, the new
+     * stream forgets about supplied custom {@link ForkJoinPool} and its
+     * terminal operation will be executed in common pool.
+     */
+    @Override
+    public IntStreamEx parallel() {
+        return StreamFactory.DEFAULT.newIntStreamEx(stream.parallel());
+    }
+
+    /**
+     * Returns an equivalent stream that is parallel and bound to the supplied
+     * {@link ForkJoinPool}.
+     *
+     * <p>
+     * This is an intermediate operation.
+     * 
+     * <p>
+     * The terminal operation of this stream or any derived stream (except the
+     * streams created via {@link #parallel()} or {@link #sequential()} methods)
+     * will be executed inside the supplied {@code ForkJoinPool}. If current
+     * thread does not belong to that pool, it will wait till calculation
+     * finishes.
+     *
+     * @param fjp
+     *            a {@code ForkJoinPool} to submit the stream operation to.
+     * @return a parallel stream bound to the supplied {@code ForkJoinPool}
+     * @since 0.2.0
+     */
+    public IntStreamEx parallel(ForkJoinPool fjp) {
+        return StreamFactory.forCustomPool(fjp).newIntStreamEx(stream.parallel());
+    }
+
+    @Override
+    public OfInt iterator() {
+        return stream.iterator();
+    }
+
+    @Override
+    public java.util.Spliterator.OfInt spliterator() {
+        return stream.spliterator();
+    }
+
+    /**
+     * Returns a new {@code IntStreamEx} which is a concatenation of this stream
+     * and the stream containing supplied values
+     * 
+     * @param values
+     *            the values to append to the stream
+     * @return the new stream
+     */
+    public IntStreamEx append(int... values) {
+        if (values.length == 0)
+            return this;
+        return strategy().newIntStreamEx(IntStream.concat(stream, IntStream.of(values)));
+    }
+
+    public IntStreamEx append(IntStream other) {
+        return strategy().newIntStreamEx(IntStream.concat(stream, other));
+    }
+
+    /**
+     * Returns a new {@code IntStreamEx} which is a concatenation of the stream
+     * containing supplied values and this stream
+     * 
+     * @param values
+     *            the values to prepend to the stream
+     * @return the new stream
+     */
+    public IntStreamEx prepend(int... values) {
+        if (values.length == 0)
+            return this;
+        return strategy().newIntStreamEx(IntStream.concat(IntStream.of(values), stream));
+    }
+
+    public IntStreamEx prepend(IntStream other) {
+        return strategy().newIntStreamEx(IntStream.concat(other, stream));
     }
 
     /**
@@ -1038,65 +1103,6 @@ public class IntStreamEx implements IntStream {
     }
 
     /**
-     * Returns a {@link BitSet} containing the elements of this stream.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return a {@code BitSet} which set bits correspond to the elements of
-     *         this stream.
-     * @since 0.2.0
-     */
-    public BitSet toBitSet() {
-        return collect(BitSet::new, BitSet::set, BitSet::or);
-    }
-
-    /**
-     * Returns a {@code byte[]} array containing the elements of this stream
-     * which are converted to bytes using {@code (byte)} cast operation.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return an array containing the elements of this stream
-     * @since 0.3.0
-     */
-    public byte[] toByteArray() {
-        return collectSized(ByteBuffer::new, ByteBuffer::add, ByteBuffer::addAll, ByteBuffer::new,
-                ByteBuffer::addUnsafe).toArray();
-    }
-
-    /**
-     * Returns a {@code char[]} array containing the elements of this stream
-     * which are converted to bytes using {@code (char)} cast operation.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return an array containing the elements of this stream
-     * @since 0.3.0
-     */
-    public char[] toCharArray() {
-        return collectSized(CharBuffer::new, CharBuffer::add, CharBuffer::addAll, CharBuffer::new,
-                CharBuffer::addUnsafe).toArray();
-    }
-
-    /**
-     * Returns a {@code short[]} array containing the elements of this stream
-     * which are converted to bytes using {@code (short)} cast operation.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return an array containing the elements of this stream
-     * @since 0.3.0
-     */
-    public short[] toShortArray() {
-        return collectSized(ShortBuffer::new, ShortBuffer::add, ShortBuffer::addAll, ShortBuffer::new,
-                ShortBuffer::addUnsafe).toArray();
-    }
-
-    /**
      * Returns a {@link String} consisting of chars from this stream.
      * 
      * <p>
@@ -1125,7 +1131,7 @@ public class IntStreamEx implements IntStream {
     public String codePointsToString() {
         return collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
     }
-    
+
     /**
      * Returns a stream consisting of the results of applying the given function
      * to the every adjacent pair of elements of this stream.
@@ -1145,8 +1151,8 @@ public class IntStreamEx implements IntStream {
      */
     public IntStreamEx pairMap(IntBinaryOperator mapper) {
         return strategy().newIntStreamEx(
-                StreamSupport.intStream(new PairSpliterator.PSOfInt(mapper, stream.spliterator(), 0, false, 0, false),
-                        stream.isParallel()).onClose(stream::close));
+            StreamSupport.intStream(new PairSpliterator.PSOfInt(mapper, stream.spliterator()), stream.isParallel())
+                    .onClose(stream::close));
     }
 
     /**
@@ -1169,8 +1175,8 @@ public class IntStreamEx implements IntStream {
 
     /**
      * Returns a {@link String} which contains the results of calling
-     * {@link String#valueOf(int)} on each element of this stream, separated
-     * by the specified delimiter, with the specified prefix and suffix in
+     * {@link String#valueOf(int)} on each element of this stream, separated by
+     * the specified delimiter, with the specified prefix and suffix in
      * encounter order.
      *
      * <p>
@@ -1191,7 +1197,7 @@ public class IntStreamEx implements IntStream {
     public String joining(CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
         return collect(IntCollector.joining(delimiter, prefix, suffix));
     }
-    
+
     /**
      * Returns an empty sequential {@code IntStreamEx}.
      *
@@ -1256,7 +1262,7 @@ public class IntStreamEx implements IntStream {
      * @since 0.2.0
      */
     public static IntStreamEx of(byte... elements) {
-        return range(elements.length).map(i -> elements[i]);
+        return of(elements, 0, elements.length);
     }
 
     /**
@@ -1278,7 +1284,7 @@ public class IntStreamEx implements IntStream {
      */
     public static IntStreamEx of(byte[] array, int startInclusive, int endExclusive) {
         rangeCheck(array.length, startInclusive, endExclusive);
-        return range(startInclusive, endExclusive).map(i -> array[i]);
+        return of(new RangeBasedSpliterator.OfByte(startInclusive, endExclusive, array));
     }
 
     /**
@@ -1291,7 +1297,7 @@ public class IntStreamEx implements IntStream {
      * @since 0.2.0
      */
     public static IntStreamEx of(char... elements) {
-        return range(elements.length).map(i -> elements[i]);
+        return of(elements, 0, elements.length);
     }
 
     /**
@@ -1313,7 +1319,7 @@ public class IntStreamEx implements IntStream {
      */
     public static IntStreamEx of(char[] array, int startInclusive, int endExclusive) {
         rangeCheck(array.length, startInclusive, endExclusive);
-        return range(startInclusive, endExclusive).map(i -> array[i]);
+        return of(new RangeBasedSpliterator.OfChar(startInclusive, endExclusive, array));
     }
 
     /**
@@ -1326,7 +1332,7 @@ public class IntStreamEx implements IntStream {
      * @since 0.2.0
      */
     public static IntStreamEx of(short... elements) {
-        return range(elements.length).map(i -> elements[i]);
+        return of(elements, 0, elements.length);
     }
 
     /**
@@ -1348,7 +1354,7 @@ public class IntStreamEx implements IntStream {
      */
     public static IntStreamEx of(short[] array, int startInclusive, int endExclusive) {
         rangeCheck(array.length, startInclusive, endExclusive);
-        return range(startInclusive, endExclusive).map(i -> array[i]);
+        return of(new RangeBasedSpliterator.OfShort(startInclusive, endExclusive, array));
     }
 
     /**
@@ -1522,6 +1528,19 @@ public class IntStreamEx implements IntStream {
     }
 
     /**
+     * Returns a sequential {@link IntStreamEx} created from given
+     * {@link java.util.Spliterator.OfInt}.
+     * 
+     * @param spliterator
+     *            a spliterator to create the stream from.
+     * @return the new stream
+     * @since 0.3.4
+     */
+    public static IntStreamEx of(Spliterator.OfInt spliterator) {
+        return new IntStreamEx(StreamSupport.intStream(spliterator, false));
+    }
+
+    /**
      * Returns a sequential {@code IntStreamEx} containing an
      * {@link OptionalInt} value, if present, otherwise returns an empty
      * {@code IntStreamEx}.
@@ -1629,7 +1648,9 @@ public class IntStreamEx implements IntStream {
      * @see CharSequence#chars()
      */
     public static IntStreamEx ofChars(CharSequence seq) {
-        return new IntStreamEx(seq.chars());
+        // In JDK 8 there's only default chars() method which uses IteratorSpliterator
+        // In JDK 9 chars() method for most of implementations is much better
+        return of(IS_JDK9 ? seq.chars() : java.nio.CharBuffer.wrap(seq).chars());
     }
 
     /**
@@ -1753,7 +1774,7 @@ public class IntStreamEx implements IntStream {
      * @since 0.1.2
      */
     public static IntStreamEx constant(int value, long length) {
-        return new IntStreamEx(IntStream.generate(() -> value).limit(length));
+        return of(new ConstantSpliterator.ConstInt(value, length));
     }
 
     /**
@@ -1774,6 +1795,6 @@ public class IntStreamEx implements IntStream {
      * @since 0.2.1
      */
     public static IntStreamEx zip(int[] first, int[] second, IntBinaryOperator mapper) {
-        return intStreamForLength(first.length, second.length).map(i -> mapper.applyAsInt(first[i], second[i]));
+        return of(new RangeBasedSpliterator.ZipInt(0, checkLength(first.length, second.length), mapper, first, second));
     }
 }

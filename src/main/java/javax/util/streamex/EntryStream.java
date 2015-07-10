@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterator;
 import java.util.Map.Entry;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -38,14 +39,14 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static javax.util.streamex.StreamExInternals.*;
 
 /**
- * A {@link Stream} of {@link Map.Entry} objects which provides additional
- * specific functionality.
+ * A {@link Stream} of {@link Entry} objects which provides additional specific
+ * functionality.
  * 
  * <p>
  * While {@code EntryStream} implements {@code Iterable}, it is not a
@@ -61,8 +62,9 @@ import static javax.util.streamex.StreamExInternals.*;
  *            the type of {@code Entry} values
  */
 public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream<K, V>> {
-    EntryStream(Stream<Entry<K, V>> stream) {
-        super(stream);
+    @SuppressWarnings("unchecked")
+    EntryStream(Stream<? extends Entry<K, V>> stream) {
+        super((Stream<Entry<K, V>>) stream);
     }
 
     @Override
@@ -79,50 +81,18 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
         return entry -> mapper.apply(entry.getKey(), entry.getValue());
     }
 
-    static class IndexEntry<V> implements Entry<Integer, V> {
-        int index;
-        V value;
-
-        IndexEntry(int index, V value) {
-            this.index = index;
-            this.value = value;
-        }
-
-        @Override
-        public Integer getKey() {
-            return index;
-        }
-
-        @Override
-        public V getValue() {
-            return value;
-        }
-
-        @Override
-        public V setValue(V value) {
-            throw new UnsupportedOperationException();
-        }
-    }
-
     @Override
     public EntryStream<K, V> sequential() {
         return StreamFactory.DEFAULT.newEntryStream(stream.sequential());
     }
 
     /**
-     * Returns an equivalent stream that is parallel. May return itself, either
-     * because the stream was already parallel, or because the underlying stream
-     * state was modified to be parallel.
-     *
-     * <p>
-     * This is an intermediate operation.
+     * {@inheritDoc}
      * 
      * <p>
      * If this stream was created using {@link #parallel(ForkJoinPool)}, the new
      * stream forgets about supplied custom {@link ForkJoinPool} and its
      * terminal operation will be executed in common pool.
-     *
-     * @return a parallel stream
      */
     @Override
     public EntryStream<K, V> parallel() {
@@ -134,7 +104,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * {@link ForkJoinPool}.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      * 
      * <p>
      * The terminal operation of this stream or any derived stream (except the
@@ -157,7 +128,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * and values of the current stream using the specified delimiter.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param delimiter
      *            the delimiter to be used between key and value
@@ -175,7 +147,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * specified prefix and suffix.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param delimiter
      *            the delimiter to be used between key and value
@@ -193,6 +166,30 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
                 .append(suffix).toString());
     }
 
+    /**
+     * Returns an {@code EntryStream} consisting of the entries whose keys are
+     * results of replacing source keys with the contents of a mapped stream
+     * produced by applying the provided mapping function to each source key and
+     * values are left intact. Each mapped stream is
+     * {@link java.util.stream.BaseStream#close() closed} after its contents
+     * have been placed into this stream. (If a mapped stream is {@code null} an
+     * empty stream is used, instead.)
+     *
+     * <p>
+     * This is an <a href="package-summary.html#StreamOps">intermediate
+     * operation</a>.
+     *
+     * @param <KK>
+     *            The type of new keys
+     * @param mapper
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to apply to each key which produces a stream of new
+     *            keys
+     * @return the new stream
+     */
     public <KK> EntryStream<KK, V> flatMapKeys(Function<? super K, ? extends Stream<? extends KK>> mapper) {
         return strategy().newEntryStream(stream.flatMap(e -> {
             Stream<? extends KK> s = mapper.apply(e.getKey());
@@ -200,6 +197,30 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
         }));
     }
 
+    /**
+     * Returns an {@code EntryStream} consisting of the entries whose values are
+     * results of replacing source values with the contents of a mapped stream
+     * produced by applying the provided mapping function to each source value
+     * and keys are left intact. Each mapped stream is
+     * {@link java.util.stream.BaseStream#close() closed} after its contents
+     * have been placed into this stream. (If a mapped stream is {@code null} an
+     * empty stream is used, instead.)
+     *
+     * <p>
+     * This is an <a href="package-summary.html#StreamOps">intermediate
+     * operation</a>.
+     *
+     * @param <VV>
+     *            The type of new values
+     * @param mapper
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to apply to each value which produces a stream of new
+     *            values
+     * @return the new stream
+     */
     public <VV> EntryStream<K, VV> flatMapValues(Function<? super V, ? extends Stream<? extends VV>> mapper) {
         return strategy().newEntryStream(stream.flatMap(e -> {
             Stream<? extends VV> s = mapper.apply(e.getValue());
@@ -215,7 +236,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * stream is {@code null} an empty stream is used, instead.)
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <R>
      *            The element type of the new stream
@@ -296,7 +318,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public EntryStream<K, V> append(K k1, V v1, K k2, V v2, K k3, V v3) {
         return append(Stream.of(new SimpleImmutableEntry<>(k1, v1), new SimpleImmutableEntry<>(k2, v2),
-                new SimpleImmutableEntry<>(k3, v3)));
+            new SimpleImmutableEntry<>(k3, v3)));
     }
 
     /**
@@ -368,7 +390,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public EntryStream<K, V> prepend(K k1, V v1, K k2, V v2, K k3, V v3) {
         return prepend(Stream.of(new SimpleImmutableEntry<>(k1, v1), new SimpleImmutableEntry<>(k2, v2),
-                new SimpleImmutableEntry<>(k3, v3)));
+            new SimpleImmutableEntry<>(k3, v3)));
     }
 
     /**
@@ -376,7 +398,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * modified by applying the given function and values are left unchanged.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <KK>
      *            The type of the keys of the new stream
@@ -386,7 +409,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public <KK> EntryStream<KK, V> mapKeys(Function<? super K, ? extends KK> keyMapper) {
         return strategy().newEntryStream(
-                stream.map(e -> new SimpleImmutableEntry<>(keyMapper.apply(e.getKey()), e.getValue())));
+            stream.map(e -> new SimpleImmutableEntry<>(keyMapper.apply(e.getKey()), e.getValue())));
     }
 
     /**
@@ -394,7 +417,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * left unchanged and values are modified by applying the given function.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <VV>
      *            The type of the values of the new stream
@@ -404,7 +428,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public <VV> EntryStream<K, VV> mapValues(Function<? super V, ? extends VV> valueMapper) {
         return strategy().newEntryStream(
-                stream.map(e -> new SimpleImmutableEntry<>(e.getKey(), valueMapper.apply(e.getValue()))));
+            stream.map(e -> new SimpleImmutableEntry<>(e.getKey(), valueMapper.apply(e.getValue()))));
     }
 
     /**
@@ -412,7 +436,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * given function to the keys and values of this stream.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <R>
      *            The element type of the new stream
@@ -430,7 +455,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * modified by applying the given function and values are left unchanged.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <KK>
      *            The type of the keys of the new stream
@@ -450,7 +476,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * left unchanged and values are modified by applying the given function.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <VV>
      *            The type of the values of the new stream
@@ -470,7 +497,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * modified by applying the given function and values are left unchanged.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <KK>
      *            The type of the keys of the new stream
@@ -482,7 +510,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public <KK> EntryStream<KK, V> mapToKey(BiFunction<? super K, ? super V, ? extends KK> keyMapper) {
         return strategy().newEntryStream(
-                stream.map(e -> new SimpleImmutableEntry<>(keyMapper.apply(e.getKey(), e.getValue()), e.getValue())));
+            stream.map(e -> new SimpleImmutableEntry<>(keyMapper.apply(e.getKey(), e.getValue()), e.getValue())));
     }
 
     /**
@@ -490,7 +518,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * left unchanged and values are modified by applying the given function.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <VV>
      *            The type of the values of the new stream
@@ -502,15 +531,16 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public <VV> EntryStream<K, VV> mapToValue(BiFunction<? super K, ? super V, ? extends VV> valueMapper) {
         return strategy().newEntryStream(
-                stream.map(e -> new SimpleImmutableEntry<>(e.getKey(), valueMapper.apply(e.getKey(), e.getValue()))));
+            stream.map(e -> new SimpleImmutableEntry<>(e.getKey(), valueMapper.apply(e.getKey(), e.getValue()))));
     }
 
     /**
      * Returns a stream consisting of the {@link Entry} objects which keys are
-     * the values of this stream elements and vice versa
+     * the values of this stream elements and vice versa.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @return the new stream
      */
@@ -523,7 +553,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * match the given predicate.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param keyPredicate
      *            a non-interfering, stateless predicate to apply to the key of
@@ -539,7 +570,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * match the given predicate.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param valuePredicate
      *            a non-interfering, stateless predicate to apply to the value
@@ -555,7 +587,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * match the given predicate.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param predicate
      *            a non-interfering, stateless predicate to apply to the
@@ -573,7 +606,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * don't match the given predicate.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param keyPredicate
      *            a non-interfering, stateless predicate to apply to the key of
@@ -589,7 +623,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * don't match the given predicate.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param valuePredicate
      *            a non-interfering, stateless predicate to apply to the value
@@ -605,7 +640,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * not null.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @return the new stream
      */
@@ -618,7 +654,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * not null.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @return the new stream
      */
@@ -642,7 +679,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * from the resulting stream.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * <p>
      * For parallel stream pipelines, the action may be called at whatever time
@@ -666,7 +704,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * consumed from the resulting stream.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * <p>
      * For parallel stream pipelines, the action may be called at whatever time
@@ -690,7 +729,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * are consumed from the resulting stream.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * <p>
      * For parallel stream pipelines, the action may be called at whatever time
@@ -712,7 +752,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * Returns a stream consisting of the keys of this stream elements.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @return the new stream
      */
@@ -724,7 +765,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * Returns a stream consisting of the values of this stream elements.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @return the new stream
      */
@@ -744,7 +786,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * thrown when the collection operation is performed.
      * 
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * Returned {@code Map} is guaranteed to be modifiable.
@@ -773,7 +816,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * function.
      * 
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * Returned {@code Map} is guaranteed to be modifiable.
@@ -795,7 +839,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
     public Map<K, V> toMap(BinaryOperator<V> mergeFunction) {
         if (stream.isParallel())
             return collect(Collectors.toConcurrentMap(Entry::getKey, Entry::getValue, mergeFunction,
-                    ConcurrentHashMap::new));
+                ConcurrentHashMap::new));
         return collect(Collectors.toMap(Entry::getKey, Entry::getValue, mergeFunction, HashMap::new));
     }
 
@@ -807,7 +851,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
     public <M extends Map<K, V>> M toCustomMap(BinaryOperator<V> mergeFunction, Supplier<M> mapSupplier) {
         if (stream.isParallel() && mapSupplier.get() instanceof ConcurrentMap)
             return (M) collect(Collectors.toConcurrentMap(Entry::getKey, Entry::getValue, mergeFunction,
-                    (Supplier<? extends ConcurrentMap<K, V>>) mapSupplier));
+                (Supplier<? extends ConcurrentMap<K, V>>) mapSupplier));
         return collect(Collectors.toMap(Entry::getKey, Entry::getValue, mergeFunction, mapSupplier));
     }
 
@@ -823,7 +867,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * thrown when the collection operation is performed.
      * 
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * Returned {@code SortedMap} is guaranteed to be modifiable.
@@ -853,7 +898,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * function.
      * 
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * Returned {@code SortedMap} is guaranteed to be modifiable.
@@ -875,7 +921,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
     public SortedMap<K, V> toSortedMap(BinaryOperator<V> mergeFunction) {
         if (stream.isParallel())
             return collect(Collectors.toConcurrentMap(Entry::getKey, Entry::getValue, mergeFunction,
-                    ConcurrentSkipListMap::new));
+                ConcurrentSkipListMap::new));
         return collect(Collectors.toMap(Entry::getKey, Entry::getValue, mergeFunction, TreeMap::new));
     }
 
@@ -890,19 +936,19 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
     public <A, D> Map<K, D> grouping(Collector<? super V, A, D> downstream) {
         if (stream.isParallel())
             return collect(Collectors.groupingByConcurrent(Entry::getKey,
-                    Collectors.<Entry<K, V>, V, A, D> mapping(Entry::getValue, downstream)));
-        return collect(Collectors.groupingBy(Entry::getKey,
                 Collectors.<Entry<K, V>, V, A, D> mapping(Entry::getValue, downstream)));
+        return collect(Collectors.groupingBy(Entry::getKey,
+            Collectors.<Entry<K, V>, V, A, D> mapping(Entry::getValue, downstream)));
     }
 
     @SuppressWarnings("unchecked")
     public <A, D, M extends Map<K, D>> M grouping(Supplier<M> mapSupplier, Collector<? super V, A, D> downstream) {
         if (stream.isParallel() && mapSupplier.get() instanceof ConcurrentMap)
             return (M) collect(Collectors.groupingByConcurrent(Entry::getKey,
-                    (Supplier<? extends ConcurrentMap<K, D>>) mapSupplier,
-                    Collectors.<Entry<K, V>, V, A, D> mapping(Entry::getValue, downstream)));
-        return collect(Collectors.groupingBy(Entry::getKey, mapSupplier,
+                (Supplier<? extends ConcurrentMap<K, D>>) mapSupplier,
                 Collectors.<Entry<K, V>, V, A, D> mapping(Entry::getValue, downstream)));
+        return collect(Collectors.groupingBy(Entry::getKey, mapSupplier,
+            Collectors.<Entry<K, V>, V, A, D> mapping(Entry::getValue, downstream)));
     }
 
     public <C extends Collection<V>> Map<K, C> groupingTo(Supplier<C> collectionFactory) {
@@ -918,7 +964,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * Performs an action for each key-value pair of this stream.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * The behavior of this operation is explicitly nondeterministic. For
@@ -963,8 +1010,25 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      *            original stream
      * @return the wrapped stream
      */
-    public static <K, V> EntryStream<K, V> of(Stream<Entry<K, V>> stream) {
+    public static <K, V> EntryStream<K, V> of(Stream<? extends Entry<K, V>> stream) {
         return new EntryStream<>(unwrap(stream));
+    }
+
+    /**
+     * Returns a sequential {@link EntryStream} created from given
+     * {@link Spliterator}.
+     *
+     * @param <K>
+     *            the type of stream keys
+     * @param <V>
+     *            the type of stream values
+     * @param spliterator
+     *            a spliterator to create the stream from.
+     * @return the new stream
+     * @since 0.3.4
+     */
+    public static <K, V> EntryStream<K, V> of(Spliterator<? extends Entry<K, V>> spliterator) {
+        return new EntryStream<>(StreamSupport.stream(spliterator, false));
     }
 
     /**
@@ -1000,7 +1064,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * @since 0.2.3
      */
     public static <V> EntryStream<Integer, V> of(List<V> list) {
-        return EntryStream.of(IntStream.range(0, list.size()).mapToObj(i -> new IndexEntry<>(i, list.get(i))));
+        return EntryStream.of(new RangeBasedSpliterator.AsEntry<>(list));
     }
 
     /**
@@ -1015,7 +1079,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * @since 0.2.3
      */
     public static <V> EntryStream<Integer, V> of(V[] array) {
-        return EntryStream.of(IntStream.range(0, array.length).mapToObj(i -> new IndexEntry<>(i, array[i])));
+        return of(Arrays.asList(array));
     }
 
     /**
@@ -1082,7 +1146,7 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      */
     public static <K, V> EntryStream<K, V> of(K k1, V v1, K k2, V v2, K k3, V v3) {
         return new EntryStream<>(Stream.of(new SimpleImmutableEntry<>(k1, v1), new SimpleImmutableEntry<>(k2, v2),
-                new SimpleImmutableEntry<>(k3, v3)));
+            new SimpleImmutableEntry<>(k3, v3)));
     }
 
     /**
@@ -1108,8 +1172,8 @@ public class EntryStream<K, V> extends AbstractStreamEx<Entry<K, V>, EntryStream
      * @since 0.2.1
      */
     public static <K, V> EntryStream<K, V> zip(List<K> keys, List<V> values) {
-        return of(intStreamForLength(keys.size(), values.size()).mapToObj(
-                i -> new SimpleImmutableEntry<>(keys.get(i), values.get(i))));
+        return of(new RangeBasedSpliterator.ZipRef<>(0, checkLength(keys.size(), values.size()), SimpleImmutableEntry<K, V>::new, keys,
+                values));
     }
 
     /**

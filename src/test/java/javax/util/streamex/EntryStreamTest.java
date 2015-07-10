@@ -51,34 +51,59 @@ public class EntryStreamTest {
         expected.put("c", 1);
         assertEquals(expected, StreamEx.of("aaa", "bbb", "c").mapToEntry(String::length).toMap());
         assertEquals(expected, StreamEx.of("aaa", "bbb", "c").mapToEntry(s -> s, String::length).toMap());
-        assertEquals(expected, EntryStream.zip(Arrays.asList("aaa", "bbb", "c"), Arrays.asList(3, 3, 1)).toMap());
-        assertEquals(expected, EntryStream.zip(new String[] { "aaa", "bbb", "c" }, new Integer[] { 3, 3, 1 }).toMap());
         assertEquals(Collections.singletonMap("foo", 1), EntryStream.of("foo", 1).toMap());
         assertEquals("a->b:c->d", EntryStream.of("a", "b", "c", "d").join("->").joining(":"));
         assertEquals(createMap(), EntryStream.of("a", 1, "bb", 22, "ccc", 33).toMap());
 
         assertEquals(
-                expected,
-                StreamEx.of(Collections.singletonMap("aaa", 3), Collections.singletonMap("bbb", 3),
-                        Collections.singletonMap("c", 1), Collections.emptyMap()).flatMapToEntry(m -> m).toMap());
+            expected,
+            StreamEx.of(Collections.singletonMap("aaa", 3), Collections.singletonMap("bbb", 3),
+                Collections.singletonMap("c", 1), Collections.emptyMap()).flatMapToEntry(m -> m).toMap());
 
         EntryStream<String, Integer> stream = EntryStream.of(data);
         assertSame(stream.stream, EntryStream.of(stream).stream);
         assertSame(stream.stream, EntryStream.of(StreamEx.of(EntryStream.of(stream))).stream);
-        
+
+        assertEquals(Collections.singletonMap("aaa", 3),
+            EntryStream.of(Collections.singletonMap("aaa", 3).entrySet().spliterator()).toMap());
+    }
+
+    @Test
+    public void testZip() {
+        Map<String, Integer> expected = new HashMap<>();
+        expected.put("aaa", 3);
+        expected.put("bbb", 3);
+        expected.put("c", 1);
+        assertEquals(expected, EntryStream.zip(Arrays.asList("aaa", "bbb", "c"), Arrays.asList(3, 3, 1)).toMap());
+        assertEquals(expected, EntryStream.zip(new String[] { "aaa", "bbb", "c" }, new Integer[] { 3, 3, 1 }).toMap());
+    }
+
+    @Test
+    public void testWithIndex() {
         Map<Integer, String> map = EntryStream.of(Arrays.asList("a", "bbb", "cc")).toMap();
         assertEquals(3, map.size());
         assertEquals("a", map.get(0));
         assertEquals("bbb", map.get(1));
         assertEquals("cc", map.get(2));
-        Map<Integer, String> map2 = EntryStream.of(new String[] {"a", "bbb", "cc"}).toMap();
+        Map<Integer, String> map2 = EntryStream.of(new String[] { "a", "bbb", "cc" }).toMap();
         assertEquals(map, map2);
+
+        Map<Integer, List<String>> grouping = EntryStream.of(new String[] { "a", "bbb", "cc", null, null })
+                .append(EntryStream.of(new String[] { "bb", "bbb", "c", null, "e" })).distinct().grouping();
+        assertEquals(Arrays.asList("a", "bb"), grouping.get(0));
+        assertEquals(Arrays.asList("bbb"), grouping.get(1));
+        assertEquals(Arrays.asList("cc", "c"), grouping.get(2));
+        assertEquals(Collections.singletonList(null), grouping.get(3));
+        assertEquals(Arrays.asList(null, "e"), grouping.get(4));
+
+        assertEquals("0=a,1=bbb,2=cc",
+            EntryStream.of(new String[] { "a", "bbb", "cc" }).map(Object::toString).joining(","));
     }
 
     @Test
     public void testMap() {
         assertEquals(Arrays.asList("1a", "22bb", "33ccc"),
-                EntryStream.of(createMap()).map(entry -> entry.getValue() + entry.getKey()).toList());
+            EntryStream.of(createMap()).map(entry -> entry.getValue() + entry.getKey()).toList());
     }
 
     @Test
@@ -94,19 +119,19 @@ public class EntryStreamTest {
         assertEquals(Collections.singletonMap("bb", 22), EntryStream.of(createMap()).filterValues(v -> v % 2 == 0)
                 .toMap());
         assertEquals(Collections.singletonMap("ccc", 33),
-                EntryStream.of(createMap()).filterKeyValue((str, num) -> !str.equals("a") && num != 22).toMap());
+            EntryStream.of(createMap()).filterKeyValue((str, num) -> !str.equals("a") && num != 22).toMap());
     }
-    
+
     @Test
     public void testPeek() {
         List<String> keys = new ArrayList<>();
         assertEquals(createMap(), EntryStream.of(createMap()).peekKeys(keys::add).toMap());
         assertEquals(Arrays.asList("a", "bb", "ccc"), keys);
-        
+
         List<Integer> values = new ArrayList<>();
         assertEquals(createMap(), EntryStream.of(createMap()).peekValues(values::add).toMap());
         assertEquals(Arrays.asList(1, 22, 33), values);
-        
+
         Map<String, Integer> map = new LinkedHashMap<>();
         assertEquals(createMap(), EntryStream.of(createMap()).peekKeyValue(map::put).toMap());
         assertEquals(createMap(), map);
@@ -187,17 +212,19 @@ public class EntryStreamTest {
     public void testAppend() {
         assertEquals(Arrays.asList(22, 33, 5, 22, 33), EntryStream.of(createMap()).append("dddd", 5)
                 .append(createMap()).filterKeys(k -> k.length() > 1).values().toList());
-        assertEquals(EntryStream.of(createMap()).toList(), EntryStream.empty().append("a", 1, "bb", 22, "ccc", 33).toList());
+        assertEquals(EntryStream.of(createMap()).toList(), EntryStream.empty().append("a", 1, "bb", 22, "ccc", 33)
+                .toList());
         assertEquals("bb:22,a:1,ccc:33", EntryStream.of("bb", 22).append("a", 1, "ccc", 33).join(":").joining(","));
     }
 
     @Test
     public void testPrepend() {
         assertEquals(Arrays.asList(5, 22, 33, 22, 33),
-                EntryStream.of(createMap()).prepend(createMap()).prepend("dddd", 5).filterKeys(k -> k.length() > 1)
-                        .values().toList());
+            EntryStream.of(createMap()).prepend(createMap()).prepend("dddd", 5).filterKeys(k -> k.length() > 1)
+                    .values().toList());
         assertEquals("a:1,ccc:33,bb:22", EntryStream.of("bb", 22).prepend("a", 1, "ccc", 33).join(":").joining(","));
-        assertEquals("a:1,ccc:33,dddd:40,bb:22", EntryStream.of("bb", 22).prepend("a", 1, "ccc", 33, "dddd", 40).join(":").joining(","));
+        assertEquals("a:1,ccc:33,dddd:40,bb:22",
+            EntryStream.of("bb", 22).prepend("a", 1, "ccc", 33, "dddd", 40).join(":").joining(","));
     }
 
     @Test
@@ -209,7 +236,7 @@ public class EntryStreamTest {
         expected.put("aaa", 3);
         expected.put("bb", 4);
         assertEquals(expected,
-                StreamEx.of("aaa", "bb", "bb").mapToEntry(String::length).toCustomMap(Integer::sum, HashMap::new));
+            StreamEx.of("aaa", "bb", "bb").mapToEntry(String::length).toCustomMap(Integer::sum, HashMap::new));
         Map<String, Integer> map = StreamEx.of("aaa", "bb", "bb").mapToEntry(String::length).toMap(Integer::sum);
         assertEquals(expected, map);
         assertFalse(map instanceof ConcurrentMap);
@@ -237,11 +264,11 @@ public class EntryStreamTest {
     @Test
     public void testFlatMap() {
         assertEquals(Arrays.asList((int) 'a', (int) 'b', (int) 'b', (int) 'c', (int) 'c', (int) 'c'),
-                EntryStream.of(createMap()).flatMap(entry -> entry.getKey().chars().boxed()).toList());
+            EntryStream.of(createMap()).flatMap(entry -> entry.getKey().chars().boxed()).toList());
         assertEquals(Arrays.asList("a", "b", "b", "c", "c", "c"),
-                EntryStream.of(createMap()).flatCollection(entry -> Arrays.asList(entry.getKey().split(""))).toList());
+            EntryStream.of(createMap()).flatCollection(entry -> Arrays.asList(entry.getKey().split(""))).toList());
         assertEquals(Arrays.asList("a", 1, "bb", 22, "ccc", 33),
-                EntryStream.of(createMap()).flatMapKeyValue((str, num) -> Stream.of(str, num)).toList());
+            EntryStream.of(createMap()).flatMapKeyValue((str, num) -> Stream.of(str, num)).toList());
     }
 
     @Test
@@ -275,10 +302,8 @@ public class EntryStreamTest {
         assertEquals(expected, result);
 
         // Find the key which contains the biggest value in the list
-        assertEquals(
-                "bb",
-                EntryStream.of(data1).flatMapValues(List::stream).maxByInt(Entry::getValue).map(Entry::getKey)
-                        .orElse(null));
+        assertEquals("bb",
+            EntryStream.of(data1).flatMapValues(List::stream).maxByInt(Entry::getValue).map(Entry::getKey).orElse(null));
     }
 
     @Test
@@ -408,7 +433,7 @@ public class EntryStreamTest {
     public void testJoin() {
         assertEquals("a = 1; bb = 22; ccc = 33", EntryStream.of(createMap()).join(" = ").joining("; "));
         assertEquals("{[a = 1]; [bb = 22]; [ccc = 33]}",
-                EntryStream.of(createMap()).join(" = ", "[", "]").joining("; ", "{", "}"));
+            EntryStream.of(createMap()).join(" = ", "[", "]").joining("; ", "{", "}"));
     }
 
     private Map<String, Integer> createMap() {

@@ -66,8 +66,7 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
      */
     @Override
     default BiConsumer<A, Integer> accumulator() {
-        ObjIntConsumer<A> intAccumulator = intAccumulator();
-        return (a, i) -> intAccumulator.accept(a, i);
+        return intAccumulator()::accept;
     }
 
     /**
@@ -152,8 +151,8 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
      *         separated by the specified delimiter, in encounter order
      */
     static IntCollector<?, String> joining(CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
-        return of(StringBuilder::new, (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i),
-                joinMerger(delimiter), joinFinisher(prefix, suffix));
+        return of(StringBuilder::new, StreamExInternals.joinAccumulatorInt(delimiter), joinMerger(delimiter),
+            joinFinisher(prefix, suffix));
     }
 
     /**
@@ -167,18 +166,30 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
      *         separated by the specified delimiter, in encounter order
      */
     static IntCollector<?, String> joining(CharSequence delimiter) {
-        return of(StringBuilder::new, (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i),
-                joinMerger(delimiter), StringBuilder::toString);
+        return of(StringBuilder::new, StreamExInternals.joinAccumulatorInt(delimiter), joinMerger(delimiter),
+            StringBuilder::toString);
     }
 
     /**
-     * Returns an {@code IntCollector} that counts the number of input elements.
-     * If no elements are present, the result is 0.
+     * Returns an {@code IntCollector} that counts the number of input elements
+     * and returns the result as {@code Long}. If no elements are present, the
+     * result is 0.
      *
      * @return an {@code IntCollector} that counts the input elements
      */
     static IntCollector<?, Long> counting() {
-        return of(() -> new long[1], (box, i) -> box[0]++, SUM_LONG, UNBOX_LONG);
+        return of(LONG_BOX, (box, i) -> box[0]++, SUM_LONG, UNBOX_LONG);
+    }
+
+    /**
+     * Returns an {@code IntCollector} that counts the number of input elements
+     * and returns the result as {@code Integer}. If no elements are present,
+     * the result is 0.
+     *
+     * @return an {@code IntCollector} that counts the input elements
+     */
+    static IntCollector<?, Integer> countingInt() {
+        return of(INT_BOX, (box, i) -> box[0]++, SUM_INT, UNBOX_INT);
     }
 
     /**
@@ -189,7 +200,7 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
      *         elements
      */
     static IntCollector<?, Integer> summing() {
-        return of(() -> new int[1], (box, i) -> box[0] += i, (box1, box2) -> box1[0] += box2[0], UNBOX_INT);
+        return of(INT_BOX, (box, i) -> box[0] += i, SUM_INT, UNBOX_INT);
     }
 
     /**
@@ -233,7 +244,7 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
     static <A, R> IntCollector<?, R> mapping(IntUnaryOperator mapper, IntCollector<A, R> downstream) {
         ObjIntConsumer<A> downstreamAccumulator = downstream.intAccumulator();
         return new IntCollectorImpl<>(downstream.supplier(), (r, t) -> downstreamAccumulator.accept(r,
-                mapper.applyAsInt(t)), downstream.merger(), downstream.finisher(), downstream.characteristics());
+            mapper.applyAsInt(t)), downstream.merger(), downstream.finisher(), downstream.characteristics());
     }
 
     /**
@@ -262,8 +273,8 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
                     ((MergingCollector<U, A, R>) downstream).merger(), downstream.finisher(),
                     downstream.characteristics());
         }
-        return of(Box.supplier(downstream.supplier()), (box, i) -> accumulator.accept(box.obj, mapper.apply(i)),
-                Box.combiner(downstream.combiner()), Box.finisher(downstream.finisher()));
+        return of(Box.supplier(downstream.supplier()), (box, i) -> accumulator.accept(box.a, mapper.apply(i)),
+            Box.combiner(downstream.combiner()), Box.finisher(downstream.finisher()));
     }
 
     /**
@@ -332,7 +343,7 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
      */
     static IntCollector<?, Integer> reducing(int identity, IntBinaryOperator op) {
         return of(() -> new int[] { identity }, (box, i) -> box[0] = op.applyAsInt(box[0], i),
-                (box1, box2) -> box1[0] = op.applyAsInt(box1[0], box2[0]), UNBOX_INT);
+            (box1, box2) -> box1[0] = op.applyAsInt(box1[0], box2[0]), UNBOX_INT);
     }
 
     /**
@@ -388,7 +399,7 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
     static <A, D> IntCollector<?, Map<Boolean, D>> partitioningBy(IntPredicate predicate, IntCollector<A, D> downstream) {
         ObjIntConsumer<A> downstreamAccumulator = downstream.intAccumulator();
         ObjIntConsumer<BooleanMap<A>> accumulator = (result, t) -> downstreamAccumulator.accept(
-                predicate.test(t) ? result.trueValue : result.falseValue, t);
+            predicate.test(t) ? result.trueValue : result.falseValue, t);
         BiConsumer<BooleanMap<A>, BooleanMap<A>> merger = BooleanMap.merger(downstream.merger());
         Supplier<BooleanMap<A>> supplier = BooleanMap.supplier(downstream.supplier());
         if (downstream.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH)) {
@@ -506,7 +517,7 @@ public interface IntCollector<A, R> extends MergingCollector<Integer, A, R> {
             return (IntCollector<?, M>) of((Supplier<Map<K, A>>) mapFactory, accumulator, merger);
         } else {
             return of((Supplier<Map<K, A>>) mapFactory, accumulator, merger,
-                    mapFinisher((Function<A, A>) downstream.finisher()));
+                mapFinisher((Function<A, A>) downstream.finisher()));
         }
     }
 

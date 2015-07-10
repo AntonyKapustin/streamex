@@ -21,7 +21,14 @@ import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Random;
 import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.LongFunction;
+import java.util.function.LongToDoubleFunction;
+import java.util.function.LongToIntFunction;
+import java.util.function.LongUnaryOperator;
+import java.util.function.Supplier;
 import java.util.stream.LongStream;
 
 import org.junit.Test;
@@ -56,7 +63,10 @@ public class LongStreamExTest {
         assertSame(stream, LongStreamEx.of(stream));
 
         assertArrayEquals(new long[] { 4, 2, 0, -2, -4 },
-                LongStreamEx.zip(new long[] { 5, 4, 3, 2, 1 }, new long[] { 1, 2, 3, 4, 5 }, (a, b) -> a - b).toArray());
+            LongStreamEx.zip(new long[] { 5, 4, 3, 2, 1 }, new long[] { 1, 2, 3, 4, 5 }, (a, b) -> a - b).toArray());
+        
+        assertArrayEquals(new long[] { 1, 5, 3 }, LongStreamEx.of(Spliterators.spliterator(new long[] { 1, 5, 3 }, 0))
+            .toArray());
     }
 
     @Test
@@ -93,7 +103,7 @@ public class LongStreamExTest {
         assertArrayEquals(new long[] { -1, 0, 1, 2, 3 }, LongStreamEx.of(1, 2, 3).prepend(-1, 0).toArray());
         assertArrayEquals(new long[] { 1, 2, 3 }, LongStreamEx.of(1, 2, 3).prepend().toArray());
         assertArrayEquals(new long[] { 10, 11, 0, 1, 2, 3 },
-                LongStreamEx.range(0, 4).prepend(LongStreamEx.range(10, 12)).toArray());
+            LongStreamEx.range(0, 4).prepend(LongStreamEx.range(10, 12)).toArray());
     }
 
     @Test
@@ -119,13 +129,13 @@ public class LongStreamExTest {
     @Test
     public void testRanges() {
         assertArrayEquals(new long[] { 5, 4, Long.MAX_VALUE },
-                LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).greater(3).toArray());
+            LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).greater(3).toArray());
         assertArrayEquals(new long[] {}, LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).greater(Long.MAX_VALUE)
                 .toArray());
         assertArrayEquals(new long[] { 5, 3, 4, Long.MAX_VALUE }, LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE)
                 .atLeast(3).toArray());
         assertArrayEquals(new long[] { Long.MAX_VALUE },
-                LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).atLeast(Long.MAX_VALUE).toArray());
+            LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).atLeast(Long.MAX_VALUE).toArray());
         assertArrayEquals(new long[] { 1, -1 }, LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).less(3).toArray());
         assertArrayEquals(new long[] { 1, 3, -1 }, LongStreamEx.of(1, 5, 3, 4, -1, Long.MAX_VALUE).atMost(3).toArray());
     }
@@ -144,11 +154,11 @@ public class LongStreamExTest {
     @Test
     public void testSort() {
         assertArrayEquals(new long[] { 0, 3, 6, 1, 4, 7, 2, 5, 8 },
-                LongStreamEx.range(0, 9).sortedByLong(i -> i % 3 * 3 + i / 3).toArray());
+            LongStreamEx.range(0, 9).sortedByLong(i -> i % 3 * 3 + i / 3).toArray());
         assertArrayEquals(new long[] { 10, 11, 5, 6, 7, 8, 9 }, LongStreamEx.range(5, 12).sortedBy(String::valueOf)
                 .toArray());
         assertArrayEquals(new long[] { Long.MAX_VALUE, 1000, 1, 0, -10, Long.MIN_VALUE },
-                LongStreamEx.of(0, 1, 1000, -10, Long.MIN_VALUE, Long.MAX_VALUE).reverseSorted().toArray());
+            LongStreamEx.of(0, 1, 1000, -10, Long.MIN_VALUE, Long.MAX_VALUE).reverseSorted().toArray());
     }
 
     @Test
@@ -165,6 +175,20 @@ public class LongStreamExTest {
         assertEquals(31, LongStreamEx.of(15, 8, 31, 47, 19, 29).minByInt(x -> (int) (x % 10 * 10 + x / 10)).getAsLong());
         assertEquals(29, LongStreamEx.of(15, 8, 31, 47, 19, 29).maxByLong(x -> x % 10 * 10 + x / 10).getAsLong());
         assertEquals(31, LongStreamEx.of(15, 8, 31, 47, 19, 29).minByLong(x -> x % 10 * 10 + x / 10).getAsLong());
+
+        Supplier<LongStreamEx> s = () -> LongStreamEx.of(1, 50, 120, 35, 130, 12, 0);
+        LongToIntFunction intKey = x -> String.valueOf(x).length();
+        LongUnaryOperator longKey = x -> String.valueOf(x).length();
+        LongToDoubleFunction doubleKey = x -> String.valueOf(x).length();
+        LongFunction<Integer> objKey = x -> String.valueOf(x).length();
+        List<Function<LongStreamEx, OptionalLong>> minFns = Arrays.asList(is -> is.minByInt(intKey), 
+            is -> is.minByLong(longKey), is -> is.minByDouble(doubleKey), is -> is.minBy(objKey));
+        List<Function<LongStreamEx, OptionalLong>> maxFns = Arrays.asList(is -> is.maxByInt(intKey), 
+            is -> is.maxByLong(longKey), is -> is.maxByDouble(doubleKey), is -> is.maxBy(objKey));
+        minFns.forEach(fn -> assertEquals(1, fn.apply(s.get()).getAsLong()));
+        minFns.forEach(fn -> assertEquals(1, fn.apply(s.get().parallel()).getAsLong()));
+        maxFns.forEach(fn -> assertEquals(120, fn.apply(s.get()).getAsLong()));
+        maxFns.forEach(fn -> assertEquals(120, fn.apply(s.get().parallel()).getAsLong()));
     }
 
     @Test
@@ -179,8 +203,10 @@ public class LongStreamExTest {
                 .append(LongStream.empty()).parallel().pairMap((a, b) -> b - a).toArray());
         assertArrayEquals(LongStreamEx.range(1, 100).toArray(), LongStreamEx.range(100).map(i -> i * (i + 1) / 2)
                 .prepend(LongStream.empty()).parallel().pairMap((a, b) -> b - a).toArray());
+        
+        assertEquals(1, LongStreamEx.range(1000).map(x -> x * x).pairMap((a, b) -> b-a).pairMap((a, b) -> b-a).distinct().count());
     }
-    
+
     @Test
     public void testJoining() {
         assertEquals("0,1,2,3,4,5,6,7,8,9", LongStreamEx.range(10).joining(","));
@@ -188,11 +214,19 @@ public class LongStreamExTest {
         assertEquals("[0,1,2,3,4,5,6,7,8,9]", LongStreamEx.range(10).joining(",", "[", "]"));
         assertEquals("[0,1,2,3,4,5,6,7,8,9]", LongStreamEx.range(10).parallel().joining(",", "[", "]"));
     }
-    
+
     @Test
     public void testMapToEntry() {
         Map<Long, List<Long>> result = LongStreamEx.range(10).mapToEntry(x -> x % 2, x -> x).grouping();
         assertEquals(Arrays.asList(0l, 2l, 4l, 6l, 8l), result.get(0l));
         assertEquals(Arrays.asList(1l, 3l, 5l, 7l, 9l), result.get(1l));
+    }
+
+    @Test
+    public void testRecreate() {
+        assertEquals(500, (long) LongStreamEx.iterate(0, i -> i + 1).skipOrdered(1).greater(0).boxed().parallel()
+                .findAny(i -> i == 500).get());
+        assertEquals(500, (long) LongStreamEx.iterate(0, i -> i + 1).parallel().skipOrdered(1).greater(0).boxed()
+                .findAny(i -> i == 500).get());
     }
 }

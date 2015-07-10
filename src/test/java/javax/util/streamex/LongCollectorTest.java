@@ -41,6 +41,8 @@ public class LongCollectorTest {
     public void testCounting() {
         assertEquals(5000L, (long) LongStreamEx.range(10000).atLeast(5000).collect(LongCollector.counting()));
         assertEquals(5000L, (long) LongStreamEx.range(10000).parallel().atLeast(5000).collect(LongCollector.counting()));
+        assertEquals(5000, (int) LongStreamEx.range(10000).atLeast(5000).collect(LongCollector.countingInt()));
+        assertEquals(5000, (int) LongStreamEx.range(10000).parallel().atLeast(5000).collect(LongCollector.countingInt()));
     }
 
     @Test
@@ -98,7 +100,7 @@ public class LongCollectorTest {
     @Test
     public void testParts() {
         LongCollector<?, Map<Boolean, String>> collector = LongCollector.partitioningBy(i -> i % 2 == 0,
-                LongCollector.mapping(i -> i / 3, LongCollector.joining(",")));
+            LongCollector.mapping(i -> i / 3, LongCollector.joining(",")));
         Map<Boolean, String> parts = LongStreamEx.range(10).parallel().collect(collector);
         Map<Boolean, String> expected = new HashMap<>();
         expected.put(true, "0,0,1,2,2");
@@ -125,17 +127,17 @@ public class LongCollectorTest {
     public void testAsCollector() {
         assertEquals(10000499500l, (long) LongStream.range(10000000, 10001000).boxed().collect(LongCollector.summing()));
         assertEquals(10000499500l,
-                (long) LongStream.range(10000000, 10001000).boxed().parallel().collect(LongCollector.summing()));
+            (long) LongStream.range(10000000, 10001000).boxed().parallel().collect(LongCollector.summing()));
         assertEquals(1000, (long) LongStream.range(0, 1000).boxed().collect(LongCollector.counting()));
     }
 
     @Test
     public void testAdaptor() {
         assertEquals(10000499500l,
-                (long) LongStreamEx.range(10000000, 10001000).collect(LongCollector.of(LongCollector.summing())));
+            (long) LongStreamEx.range(10000000, 10001000).collect(LongCollector.of(LongCollector.summing())));
         assertEquals(
-                10000499500l,
-                (long) LongStreamEx.range(10000000, 10001000).collect(
-                        LongCollector.of(Collectors.summingLong(Long::longValue))));
+            10000499500l,
+            (long) LongStreamEx.range(10000000, 10001000).collect(
+                LongCollector.of(Collectors.summingLong(Long::longValue))));
     }
 }

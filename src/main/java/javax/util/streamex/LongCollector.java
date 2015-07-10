@@ -65,8 +65,7 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
      */
     @Override
     default BiConsumer<A, Long> accumulator() {
-        ObjLongConsumer<A> longAccumulator = longAccumulator();
-        return (a, i) -> longAccumulator.accept(a, i);
+        return longAccumulator()::accept;
     }
 
     /**
@@ -151,8 +150,8 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
      *         separated by the specified delimiter, in encounter order
      */
     static LongCollector<?, String> joining(CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
-        return of(StringBuilder::new, (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i),
-                joinMerger(delimiter), joinFinisher(prefix, suffix));
+        return of(StringBuilder::new, StreamExInternals.joinAccumulatorLong(delimiter), joinMerger(delimiter),
+            joinFinisher(prefix, suffix));
     }
 
     /**
@@ -166,18 +165,30 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
      *         separated by the specified delimiter, in encounter order
      */
     static LongCollector<?, String> joining(CharSequence delimiter) {
-        return of(StringBuilder::new, (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i),
-                joinMerger(delimiter), StringBuilder::toString);
+        return of(StringBuilder::new, StreamExInternals.joinAccumulatorLong(delimiter), joinMerger(delimiter),
+            StringBuilder::toString);
     }
 
     /**
-     * Returns a {@code LongCollector} that counts the number of input elements.
-     * If no elements are present, the result is 0.
+     * Returns a {@code LongCollector} that counts the number of input elements
+     * and returns the result as {@code Long}. If no elements are present, the
+     * result is 0.
      *
      * @return a {@code LongCollector} that counts the input elements
      */
     static LongCollector<?, Long> counting() {
-        return of(() -> new long[1], (box, i) -> box[0]++, SUM_LONG, UNBOX_LONG);
+        return of(LONG_BOX, (box, i) -> box[0]++, SUM_LONG, UNBOX_LONG);
+    }
+
+    /**
+     * Returns an {@code LongCollector} that counts the number of input elements
+     * and returns the result as {@code Integer}. If no elements are present,
+     * the result is 0.
+     *
+     * @return an {@code LongCollector} that counts the input elements
+     */
+    static LongCollector<?, Integer> countingInt() {
+        return of(INT_BOX, (box, i) -> box[0]++, SUM_INT, UNBOX_INT);
     }
 
     /**
@@ -188,7 +199,7 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
      *         elements
      */
     static LongCollector<?, Long> summing() {
-        return of(() -> new long[1], (box, i) -> box[0] += i, SUM_LONG, UNBOX_LONG);
+        return of(LONG_BOX, (box, i) -> box[0] += i, SUM_LONG, UNBOX_LONG);
     }
 
     /**
@@ -232,7 +243,7 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
     static <A, R> LongCollector<?, R> mapping(LongUnaryOperator mapper, LongCollector<A, R> downstream) {
         ObjLongConsumer<A> downstreamAccumulator = downstream.longAccumulator();
         return new LongCollectorImpl<>(downstream.supplier(), (r, t) -> downstreamAccumulator.accept(r,
-                mapper.applyAsLong(t)), downstream.merger(), downstream.finisher(), downstream.characteristics());
+            mapper.applyAsLong(t)), downstream.merger(), downstream.finisher(), downstream.characteristics());
     }
 
     /**
@@ -261,8 +272,8 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
                     ((MergingCollector<U, A, R>) downstream).merger(), downstream.finisher(),
                     downstream.characteristics());
         }
-        return of(Box.supplier(downstream.supplier()), (box, i) -> accumulator.accept(box.obj, mapper.apply(i)),
-                Box.combiner(downstream.combiner()), Box.finisher(downstream.finisher()));
+        return of(Box.supplier(downstream.supplier()), (box, i) -> accumulator.accept(box.a, mapper.apply(i)),
+            Box.combiner(downstream.combiner()), Box.finisher(downstream.finisher()));
     }
 
     /**
@@ -331,7 +342,7 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
      */
     static LongCollector<?, Long> reducing(long identity, LongBinaryOperator op) {
         return of(() -> new long[] { identity }, (box, i) -> box[0] = op.applyAsLong(box[0], i),
-                (box1, box2) -> box1[0] = op.applyAsLong(box1[0], box2[0]), UNBOX_LONG);
+            (box1, box2) -> box1[0] = op.applyAsLong(box1[0], box2[0]), UNBOX_LONG);
     }
 
     /**
@@ -388,7 +399,7 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
             LongCollector<A, D> downstream) {
         ObjLongConsumer<A> downstreamAccumulator = downstream.longAccumulator();
         ObjLongConsumer<BooleanMap<A>> accumulator = (result, t) -> downstreamAccumulator.accept(
-                predicate.test(t) ? result.trueValue : result.falseValue, t);
+            predicate.test(t) ? result.trueValue : result.falseValue, t);
         BiConsumer<BooleanMap<A>, BooleanMap<A>> merger = BooleanMap.merger(downstream.merger());
         Supplier<BooleanMap<A>> supplier = BooleanMap.supplier(downstream.supplier());
         if (downstream.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH)) {
@@ -506,7 +517,7 @@ public interface LongCollector<A, R> extends MergingCollector<Long, A, R> {
             return (LongCollector<?, M>) of((Supplier<Map<K, A>>) mapFactory, accumulator, merger);
         } else {
             return of((Supplier<Map<K, A>>) mapFactory, accumulator, merger,
-                    mapFinisher((Function<A, A>) downstream.finisher()));
+                mapFinisher((Function<A, A>) downstream.finisher()));
         }
     }
 

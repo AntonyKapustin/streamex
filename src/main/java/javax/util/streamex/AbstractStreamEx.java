@@ -41,6 +41,7 @@ import java.util.stream.DoubleStream;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static javax.util.streamex.StreamExInternals.*;
 
@@ -53,6 +54,10 @@ import static javax.util.streamex.StreamExInternals.*;
 
     StreamFactory strategy() {
         return StreamFactory.DEFAULT;
+    }
+    
+    <R> Stream<R> delegate(Spliterator<R> spliterator) {
+        return StreamSupport.stream(spliterator, stream.isParallel()).onClose(stream::close);
     }
 
     abstract S supply(Stream<T> stream);
@@ -67,39 +72,16 @@ import static javax.util.streamex.StreamExInternals.*;
         return stream.spliterator();
     }
 
-    /**
-     * Returns whether this stream, if a terminal operation were to be executed,
-     * would execute in parallel. Calling this method after invoking an terminal
-     * stream operation method may yield unpredictable results.
-     *
-     * @return {@code true} if this stream would execute in parallel if executed
-     */
     @Override
     public boolean isParallel() {
         return stream.isParallel();
     }
 
-    /**
-     * Returns an equivalent stream that is unordered. May return itself, either
-     * because the stream was already unordered, or because the underlying
-     * stream state was modified to be unordered.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @return an unordered stream
-     */
     @Override
     public S unordered() {
         return supply(stream.unordered());
     }
 
-    /**
-     * Closes this stream, causing all close handlers for this stream pipeline
-     * to be called.
-     *
-     * @see AutoCloseable#close()
-     */
     @Override
     public S onClose(Runnable closeHandler) {
         return supply(stream.onClose(closeHandler));
@@ -110,64 +92,16 @@ import static javax.util.streamex.StreamExInternals.*;
         stream.close();
     }
 
-    /**
-     * Returns a stream consisting of the elements of this stream that match the
-     * given predicate.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param predicate
-     *            a non-interfering, stateless predicate to apply to each
-     *            element to determine if it should be included
-     * @return the new stream
-     */
     @Override
     public S filter(Predicate<? super T> predicate) {
         return supply(stream.filter(predicate));
     }
 
-    /**
-     * Returns a stream consisting of the results of replacing each element of
-     * this stream with the contents of a mapped stream produced by applying the
-     * provided mapping function to each element. Each mapped stream is
-     * {@link java.util.stream.BaseStream#close() closed} after its contents
-     * have been placed into this stream. (If a mapped stream is {@code null} an
-     * empty stream is used, instead.)
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * <p>
-     * The {@code flatMap()} operation has the effect of applying a one-to-many
-     * transformation to the elements of the stream, and then flattening the
-     * resulting elements into a new stream.
-     *
-     * @param <R>
-     *            The element type of the new stream
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     *            which produces a stream of new values
-     * @return the new stream
-     */
     @Override
     public <R> StreamEx<R> flatMap(Function<? super T, ? extends Stream<? extends R>> mapper) {
         return strategy().newStreamEx(stream.flatMap(mapper));
     }
 
-    /**
-     * Returns a stream consisting of the results of applying the given function
-     * to the elements of this stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @param <R>
-     *            The element type of the new stream
-     * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     * @return the new stream
-     */
     @Override
     public <R> StreamEx<R> map(Function<? super T, ? extends R> mapper) {
         return strategy().newStreamEx(stream.map(mapper));
@@ -203,40 +137,11 @@ import static javax.util.streamex.StreamExInternals.*;
         return strategy().newDoubleStreamEx(stream.flatMapToDouble(mapper));
     }
 
-    /**
-     * Returns a stream consisting of the distinct elements (according to
-     * {@link Object#equals(Object)}) of this stream.
-     *
-     * <p>
-     * For ordered streams, the selection of distinct elements is stable (for
-     * duplicated elements, the element appearing first in the encounter order
-     * is preserved.) For unordered streams, no stability guarantees are made.
-     *
-     * <p>
-     * This is a stateful intermediate operation.
-     *
-     * @return the new stream
-     */
     @Override
     public S distinct() {
         return supply(stream.distinct());
     }
 
-    /**
-     * Returns a {@code StreamEx} consisting of the elements of this stream,
-     * sorted according to natural order. If the elements of this stream are not
-     * {@code Comparable}, a {@link java.lang.ClassCastException} may be thrown
-     * when the terminal operation is executed.
-     *
-     * <p>
-     * For ordered streams, the sort is stable. For unordered streams, no
-     * stability guarantees are made.
-     *
-     * <p>
-     * This is a stateful intermediate operation.
-     *
-     * @return the new stream
-     */
     @Override
     public S sorted() {
         return supply(stream.sorted());
@@ -247,25 +152,6 @@ import static javax.util.streamex.StreamExInternals.*;
         return supply(stream.sorted(comparator));
     }
 
-    /**
-     * Returns a stream consisting of the elements of this stream, additionally
-     * performing the provided action on each element as elements are consumed
-     * from the resulting stream.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * <p>
-     * For parallel stream pipelines, the action may be called at whatever time
-     * and in whatever thread the element is made available by the upstream
-     * operation. If the action modifies shared state, it is responsible for
-     * providing the required synchronization.
-     *
-     * @param action
-     *            a non-interfering action to perform on the elements as they
-     *            are consumed from the stream
-     * @return the new stream
-     */
     @Override
     public S peek(Consumer<? super T> action) {
         return supply(stream.peek(action));
@@ -281,24 +167,6 @@ import static javax.util.streamex.StreamExInternals.*;
         return supply(stream.skip(n));
     }
 
-    /**
-     * Performs an action for each element of this stream.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * <p>
-     * The behavior of this operation is explicitly nondeterministic. For
-     * parallel stream pipelines, this operation does <em>not</em> guarantee to
-     * respect the encounter order of the stream, as doing so would sacrifice
-     * the benefit of parallelism. For any given element, the action may be
-     * performed at whatever time and in whatever thread the library chooses. If
-     * the action accesses shared state, it is responsible for providing the
-     * required synchronization.
-     *
-     * @param action
-     *            a non-interfering action to perform on the elements
-     */
     @Override
     public void forEach(Consumer<? super T> action) {
         stream.forEach(action);
@@ -354,14 +222,6 @@ import static javax.util.streamex.StreamExInternals.*;
         return reduce(BinaryOperator.maxBy(comparator));
     }
 
-    /**
-     * Returns the count of elements in this stream.
-     *
-     * <p>
-     * This is a terminal operation.
-     *
-     * @return the count of elements in this stream
-     */
     @Override
     public long count() {
         return stream.count();
@@ -399,7 +259,8 @@ import static javax.util.streamex.StreamExInternals.*;
      * {@code null} nothing is added for given element to the resulting stream.)
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate
+     * operation</a>.
      *
      * <p>
      * The {@code flatCollection()} operation has the effect of applying a
@@ -409,8 +270,12 @@ import static javax.util.streamex.StreamExInternals.*;
      * @param <R>
      *            The element type of the new stream
      * @param mapper
-     *            a non-interfering, stateless function to apply to each element
-     *            which produces a {@link Collection} of new values
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to apply to each element which produces a
+     *            {@link Collection} of new values
      * @return the new stream
      */
     public <R> StreamEx<R> flatCollection(Function<? super T, ? extends Collection<? extends R>> mapper) {
@@ -425,11 +290,16 @@ import static javax.util.streamex.StreamExInternals.*;
      * match the given predicate.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate
+     * operation</a>.
      *
      * @param predicate
-     *            a non-interfering, stateless predicate to apply to each
-     *            element to determine if it should be excluded
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            predicate to apply to each element to determine if it should
+     *            be excluded
      * @return the new stream
      */
     public S remove(Predicate<? super T> predicate) {
@@ -441,7 +311,8 @@ import static javax.util.streamex.StreamExInternals.*;
      * null.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate
+     * operation</a>.
      *
      * @return the new stream
      */
@@ -465,13 +336,16 @@ import static javax.util.streamex.StreamExInternals.*;
      * desired, use {@link #findFirst(Predicate)} instead.)
      *
      * @param predicate
-     *            a non-interfering, stateless predicate which returned value
-     *            should match
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            predicate which returned value should match
      * @return an {@code Optional} describing some element of this stream, or an
      *         empty {@code Optional} if the stream is empty
      * @throws NullPointerException
      *             if the element selected is null
-     * @see Stream#findAny()
+     * @see #findAny()
      * @see #findFirst(Predicate)
      */
     public Optional<T> findAny(Predicate<? super T> predicate) {
@@ -487,70 +361,462 @@ import static javax.util.streamex.StreamExInternals.*;
      * This is a short-circuiting terminal operation.
      *
      * @param predicate
-     *            a non-interfering, stateless predicate which returned value
-     *            should match
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            predicate which returned value should match
      * @return an {@code Optional} describing the first element of this stream,
      *         or an empty {@code Optional} if the stream is empty
      * @throws NullPointerException
      *             if the element selected is null
-     * @see Stream#findFirst()
+     * @see #findFirst()
      */
     public Optional<T> findFirst(Predicate<? super T> predicate) {
         return filter(predicate).findFirst();
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted in
+     * descending order according to the provided {@code Comparator}.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param comparator
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            {@code Comparator} to be used to compare stream elements
+     * @return the new stream
+     */
     public S reverseSorted(Comparator<? super T> comparator) {
         return sorted(comparator.reversed());
     }
 
-    public <V extends Comparable<? super V>> S sortedBy(Function<T, ? extends V> keyExtractor) {
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the natural order of the keys extracted by provided
+     * function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param <V>
+     *            the type of the {@code Comparable} sort key
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
+    public <V extends Comparable<? super V>> S sortedBy(Function<? super T, ? extends V> keyExtractor) {
         return sorted(Comparator.comparing(keyExtractor));
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the int values extracted by provided function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public S sortedByInt(ToIntFunction<? super T> keyExtractor) {
         return sorted(Comparator.comparingInt(keyExtractor));
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the long values extracted by provided function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public S sortedByLong(ToLongFunction<? super T> keyExtractor) {
         return sorted(Comparator.comparingLong(keyExtractor));
     }
 
+    /**
+     * Returns a stream consisting of the elements of this stream, sorted
+     * according to the double values extracted by provided function.
+     *
+     * <p>
+     * For ordered streams, the sort is stable. For unordered streams, no
+     * stability guarantees are made.
+     *
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">stateful intermediate
+     * operation</a>.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to be used to extract sorting keys
+     * @return the new stream
+     */
     public S sortedByDouble(ToDoubleFunction<? super T> keyExtractor) {
         return sorted(Comparator.comparingDouble(keyExtractor));
     }
 
+    /**
+     * Returns the minimum element of this stream according to the natural order
+     * of the keys extracted by provided function. This is a special case of a
+     * reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparing(keyExtractor))}, but may work faster as
+     * keyExtractor function is applied only once per each input element.
+     *
+     * @param <V>
+     *            the type of the comparable keys
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the comparable keys from this stream
+     *            elements
+     * @return an {@code Optional} describing the minimum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the minimum element is null
+     */
     public <V extends Comparable<? super V>> Optional<T> minBy(Function<? super T, ? extends V> keyExtractor) {
-        return reduce((a, b) -> keyExtractor.apply(a).compareTo(keyExtractor.apply(b)) > 0 ? b : a);
+        return Box
+                .asOptional(reduce(
+                    null,
+                    (PairBox<T, V> acc, T t) -> {
+                        V val = keyExtractor.apply(t);
+                        if (acc == null)
+                            return new PairBox<>(t, val);
+                        if (val.compareTo(acc.b) < 0) {
+                            acc.b = val;
+                            acc.a = t;
+                        }
+                        return acc;
+                    },
+                    (PairBox<T, V> acc1, PairBox<T, V> acc2) -> (acc1 == null || acc2 != null
+                        && acc1.b.compareTo(acc2.b) > 0) ? acc2 : acc1));
     }
 
+    /**
+     * Returns the minimum element of this stream according to the int values
+     * extracted by provided function. This is a special case of a reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparingInt(keyExtractor))}, but may work faster
+     * as keyExtractor function is applied only once per each input element.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the int keys from this stream elements
+     * @return an {@code Optional} describing the minimum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the minimum element is null
+     */
     public Optional<T> minByInt(ToIntFunction<? super T> keyExtractor) {
-        return reduce((a, b) -> Integer.compare(keyExtractor.applyAsInt(a), keyExtractor.applyAsInt(b)) > 0 ? b : a);
+        return Box.asOptional(reduce(null, (ObjIntBox<T> acc, T t) -> {
+            int val = keyExtractor.applyAsInt(t);
+            if (acc == null)
+                return new ObjIntBox<>(t, val);
+            if (val < acc.b) {
+                acc.b = val;
+                acc.a = t;
+            }
+            return acc;
+        }, (ObjIntBox<T> acc1, ObjIntBox<T> acc2) -> (acc1 == null || acc2 != null && acc1.b > acc2.b) ? acc2 : acc1));
     }
 
+    /**
+     * Returns the minimum element of this stream according to the long values
+     * extracted by provided function. This is a special case of a reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparingLong(keyExtractor))}, but may work faster
+     * as keyExtractor function is applied only once per each input element.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the long keys from this stream elements
+     * @return an {@code Optional} describing the minimum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the minimum element is null
+     */
     public Optional<T> minByLong(ToLongFunction<? super T> keyExtractor) {
-        return reduce((a, b) -> Long.compare(keyExtractor.applyAsLong(a), keyExtractor.applyAsLong(b)) > 0 ? b : a);
+        return Box
+                .asOptional(reduce(null, (ObjLongBox<T> acc, T t) -> {
+                    long val = keyExtractor.applyAsLong(t);
+                    if (acc == null)
+                        return new ObjLongBox<>(t, val);
+                    if (val < acc.b) {
+                        acc.b = val;
+                        acc.a = t;
+                    }
+                    return acc;
+                }, (ObjLongBox<T> acc1, ObjLongBox<T> acc2) -> (acc1 == null || acc2 != null && acc1.b > acc2.b) ? acc2
+                        : acc1));
     }
 
+    /**
+     * Returns the minimum element of this stream according to the double values
+     * extracted by provided function. This is a special case of a reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparingDouble(keyExtractor))}, but may work
+     * faster as keyExtractor function is applied only once per each input
+     * element.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the double keys from this stream elements
+     * @return an {@code Optional} describing the minimum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the minimum element is null
+     */
     public Optional<T> minByDouble(ToDoubleFunction<? super T> keyExtractor) {
-        return reduce((a, b) -> Double.compare(keyExtractor.applyAsDouble(a), keyExtractor.applyAsDouble(b)) > 0 ? b
-                : a);
+        return Box.asOptional(reduce(
+            null,
+            (ObjDoubleBox<T> acc, T t) -> {
+                double val = keyExtractor.applyAsDouble(t);
+                if (acc == null)
+                    return new ObjDoubleBox<>(t, val);
+                if (Double.compare(val, acc.b) < 0) {
+                    acc.b = val;
+                    acc.a = t;
+                }
+                return acc;
+            },
+            (ObjDoubleBox<T> acc1, ObjDoubleBox<T> acc2) -> (acc1 == null || acc2 != null
+                && Double.compare(acc1.b, acc2.b) > 0) ? acc2 : acc1));
     }
 
+    /**
+     * Returns the maximum element of this stream according to the natural order
+     * of the keys extracted by provided function. This is a special case of a
+     * reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparing(keyExtractor))}, but may work faster as
+     * keyExtractor function is applied only once per each input element.
+     *
+     * @param <V>
+     *            the type of the comparable keys
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the comparable keys from this stream
+     *            elements
+     * @return an {@code Optional} describing the maximum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the maximum element is null
+     */
     public <V extends Comparable<? super V>> Optional<T> maxBy(Function<? super T, ? extends V> keyExtractor) {
-        return reduce((a, b) -> keyExtractor.apply(a).compareTo(keyExtractor.apply(b)) > 0 ? a : b);
+        return Box
+                .asOptional(reduce(
+                    null,
+                    (PairBox<T, V> acc, T t) -> {
+                        V val = keyExtractor.apply(t);
+                        if (acc == null)
+                            return new PairBox<>(t, val);
+                        if (val.compareTo(acc.b) > 0) {
+                            acc.b = val;
+                            acc.a = t;
+                        }
+                        return acc;
+                    },
+                    (PairBox<T, V> acc1, PairBox<T, V> acc2) -> (acc1 == null || acc2 != null
+                        && acc1.b.compareTo(acc2.b) < 0) ? acc2 : acc1));
     }
 
+    /**
+     * Returns the maximum element of this stream according to the int values
+     * extracted by provided function. This is a special case of a reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparingInt(keyExtractor))}, but may work faster
+     * as keyExtractor function is applied only once per each input element.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the int keys from this stream elements
+     * @return an {@code Optional} describing the maximum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the maximum element is null
+     */
     public Optional<T> maxByInt(ToIntFunction<? super T> keyExtractor) {
-        return reduce((a, b) -> Integer.compare(keyExtractor.applyAsInt(a), keyExtractor.applyAsInt(b)) > 0 ? a : b);
+        return Box.asOptional(reduce(null, (ObjIntBox<T> acc, T t) -> {
+            int val = keyExtractor.applyAsInt(t);
+            if (acc == null)
+                return new ObjIntBox<>(t, val);
+            if (val > acc.b) {
+                acc.b = val;
+                acc.a = t;
+            }
+            return acc;
+        }, (ObjIntBox<T> acc1, ObjIntBox<T> acc2) -> (acc1 == null || acc2 != null && acc1.b < acc2.b) ? acc2 : acc1));
     }
 
+    /**
+     * Returns the maximum element of this stream according to the long values
+     * extracted by provided function. This is a special case of a reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparingLong(keyExtractor))}, but may work faster
+     * as keyExtractor function is applied only once per each input element.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the long keys from this stream elements
+     * @return an {@code Optional} describing the maximum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the maximum element is null
+     */
     public Optional<T> maxByLong(ToLongFunction<? super T> keyExtractor) {
-        return reduce((a, b) -> Long.compare(keyExtractor.applyAsLong(a), keyExtractor.applyAsLong(b)) > 0 ? a : b);
+        return Box
+                .asOptional(reduce(null, (ObjLongBox<T> acc, T t) -> {
+                    long val = keyExtractor.applyAsLong(t);
+                    if (acc == null)
+                        return new ObjLongBox<>(t, val);
+                    if (val > acc.b) {
+                        acc.b = val;
+                        acc.a = t;
+                    }
+                    return acc;
+                }, (ObjLongBox<T> acc1, ObjLongBox<T> acc2) -> (acc1 == null || acc2 != null && acc1.b < acc2.b) ? acc2
+                        : acc1));
     }
 
+    /**
+     * Returns the maximum element of this stream according to the double values
+     * extracted by provided function. This is a special case of a reduction.
+     *
+     * <p>
+     * This is a terminal operation.
+     * 
+     * <p>
+     * This method is equivalent to
+     * {@code min(Comparator.comparingDouble(keyExtractor))}, but may work
+     * faster as keyExtractor function is applied only once per each input
+     * element.
+     *
+     * @param keyExtractor
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function to extract the double keys from this stream elements
+     * @return an {@code Optional} describing the maximum element of this
+     *         stream, or an empty {@code Optional} if the stream is empty
+     * @throws NullPointerException
+     *             if the maximum element is null
+     */
     public Optional<T> maxByDouble(ToDoubleFunction<? super T> keyExtractor) {
-        return reduce((a, b) -> Double.compare(keyExtractor.applyAsDouble(a), keyExtractor.applyAsDouble(b)) > 0 ? a
-                : b);
+        return Box.asOptional(reduce(
+            null,
+            (ObjDoubleBox<T> acc, T t) -> {
+                double val = keyExtractor.applyAsDouble(t);
+                if (acc == null)
+                    return new ObjDoubleBox<>(t, val);
+                if (Double.compare(val, acc.b) > 0) {
+                    acc.b = val;
+                    acc.a = t;
+                }
+                return acc;
+            },
+            (ObjDoubleBox<T> acc1, ObjDoubleBox<T> acc2) -> (acc1 == null || acc2 != null
+                && Double.compare(acc1.b, acc2.b) < 0) ? acc2 : acc1));
     }
 
     /**
@@ -705,19 +971,21 @@ import static javax.util.streamex.StreamExInternals.*;
      * @param identity
      *            the identity value
      * @param accumulator
-     *            a non-interfering, stateless function for incorporating an
-     *            additional element into a result
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function for incorporating an additional element into a result
      * @return the result of the folding
      * @see #foldRight(Object, BiFunction)
      * @see #reduce(Object, BinaryOperator)
      * @see #reduce(Object, BiFunction, BinaryOperator)
      * @since 0.2.0
      */
-    @SuppressWarnings("unchecked")
     public <U> U foldLeft(U identity, BiFunction<U, ? super T, U> accumulator) {
-        Object[] result = new Object[] { identity };
-        forEachOrdered(t -> result[0] = accumulator.apply((U) result[0], t));
-        return (U) result[0];
+        Box<U> result = new Box<>(identity);
+        forEachOrdered(t -> result.a = accumulator.apply(result.a, t));
+        return result.a;
     }
 
     /**
@@ -744,8 +1012,11 @@ import static javax.util.streamex.StreamExInternals.*;
      * @param identity
      *            the identity value
      * @param accumulator
-     *            a non-interfering, stateless function for incorporating an
-     *            additional element into a result
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function for incorporating an additional element into a result
      * @return the result of the folding
      * @see #foldLeft(Object, BiFunction)
      * @see #reduce(Object, BinaryOperator)
@@ -784,8 +1055,11 @@ import static javax.util.streamex.StreamExInternals.*;
      * @param identity
      *            the identity value
      * @param accumulator
-     *            a non-interfering, stateless function for incorporating an
-     *            additional element into a result
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function for incorporating an additional element into a result
      * @return the {@code List} where the first element is the identity and
      *         every successor element is the result of applying accumulator
      *         function to the previous list element and the corresponding
@@ -825,8 +1099,11 @@ import static javax.util.streamex.StreamExInternals.*;
      * @param identity
      *            the identity value
      * @param accumulator
-     *            a non-interfering, stateless function for incorporating an
-     *            additional element into a result
+     *            a <a
+     *            href="package-summary.html#NonInterference">non-interfering
+     *            </a>, <a
+     *            href="package-summary.html#Statelessness">stateless</a>
+     *            function for incorporating an additional element into a result
      * @return the {@code List} where the last element is the identity and every
      *         predecessor element is the result of applying accumulator
      *         function to the corresponding stream element and the next list
@@ -847,5 +1124,42 @@ import static javax.util.streamex.StreamExInternals.*;
             }
             return result;
         });
+    }
+
+    /**
+     * Returns a stream consisting of the remaining elements of this stream
+     * after discarding the first {@code n} elements of the stream even if the
+     * stream is unordered. If this stream contains fewer than {@code n}
+     * elements then an empty stream will be returned.
+     *
+     * <p>
+     * This is a stateful <a
+     * href="package-summary.html#StreamOps">quasi-intermediate</a> operation.
+     * Unlike {@link #skip(long)} it skips the first elements even if the stream
+     * is unordered. The main purpose of this method is to workaround the
+     * problem of skipping the first elements from non-sized source with further
+     * parallel processing and unordered terminal operation (such as
+     * {@link #forEach(Consumer)}). For example,
+     * {@code StreamEx.ofLines(br).skip(1).parallel().toSet()} will skip
+     * arbitrary line, but
+     * {@code StreamEx.ofLines(br).skipOrdered(1).parallel().toSet()} will skip
+     * the first one. Also it behaves much better with infinite streams
+     * processed in parallel.
+     * 
+     * <p>
+     * For sequential streams this method behaves exactly like
+     * {@link #skip(long)}.
+     *
+     * @param n
+     *            the number of leading elements to skip
+     * @return the new stream
+     * @throws IllegalArgumentException
+     *             if {@code n} is negative
+     * @see #skip(long)
+     * @since 0.3.2
+     */
+    public S skipOrdered(long n) {
+        return supply(delegate((stream.isParallel() ? StreamSupport.stream(stream.spliterator(), false) : stream).skip(
+            n).spliterator()));
     }
 }

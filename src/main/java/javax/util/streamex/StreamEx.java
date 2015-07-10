@@ -22,6 +22,7 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -82,35 +83,18 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
         return strategy().newStreamEx(stream);
     }
 
-    /**
-     * Returns an equivalent stream that is sequential. May return itself,
-     * either because the stream was already sequential, or because the
-     * underlying stream state was modified to be sequential.
-     *
-     * <p>
-     * This is an intermediate operation.
-     *
-     * @return a sequential stream
-     */
     @Override
     public StreamEx<T> sequential() {
         return StreamFactory.DEFAULT.newStreamEx(stream.sequential());
     }
 
     /**
-     * Returns an equivalent stream that is parallel. May return itself, either
-     * because the stream was already parallel, or because the underlying stream
-     * state was modified to be parallel.
-     *
-     * <p>
-     * This is an intermediate operation.
+     * {@inheritDoc}
      * 
      * <p>
      * If this stream was created using {@link #parallel(ForkJoinPool)}, the new
      * stream forgets about supplied custom {@link ForkJoinPool} and its
      * terminal operation will be executed in common pool.
-     *
-     * @return a parallel stream
      */
     @Override
     public StreamEx<T> parallel() {
@@ -122,7 +106,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * {@link ForkJoinPool}.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      * 
      * <p>
      * The terminal operation of this stream or any derived stream (except the
@@ -145,7 +130,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * instances of given class.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <TT>
      *            a type of instances to select.
@@ -153,7 +139,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      *            a class which instances should be selected
      * @return the new stream
      */
-    @SuppressWarnings({ "unchecked" })
+    @SuppressWarnings("unchecked")
     public <TT extends T> StreamEx<TT> select(Class<TT> clazz) {
         return (StreamEx<TT>) filter(clazz::isInstance);
     }
@@ -164,7 +150,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * the given function to the elements of this stream.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <V>
      *            The {@code Entry} value type
@@ -182,7 +169,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * elements of this stream.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param <K>
      *            The {@code Entry} key type
@@ -197,7 +185,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
     public <K, V> EntryStream<K, V> mapToEntry(Function<? super T, ? extends K> keyMapper,
             Function<? super T, ? extends V> valueMapper) {
         return strategy().newEntryStream(
-                stream.map(e -> new SimpleImmutableEntry<>(keyMapper.apply(e), valueMapper.apply(e))));
+            stream.map(e -> new SimpleImmutableEntry<>(keyMapper.apply(e), valueMapper.apply(e))));
     }
 
     public <K, V> EntryStream<K, V> flatMapToEntry(Function<? super T, ? extends Map<K, V>> mapper) {
@@ -218,7 +206,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * values.
      * 
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      * 
      * @param <V>
      *            the type of array elements
@@ -230,11 +219,11 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
     @SuppressWarnings("unchecked")
     public <V> EntryStream<T, V> cross(V... other) {
         if (other.length == 0)
-            return strategy().<T, V> newEntryStream(Stream.empty()).onClose(stream::close);
+            return strategy().<T, V> newEntryStream(delegate(Spliterators.emptySpliterator()));
         if (other.length == 1)
             return mapToEntry(e -> other[0]);
         return strategy().newEntryStream(
-                stream.flatMap(a -> Arrays.stream(other).map(b -> new SimpleImmutableEntry<>(a, b))));
+            stream.flatMap(a -> Arrays.stream(other).map(b -> new SimpleImmutableEntry<>(a, b))));
     }
 
     /**
@@ -248,7 +237,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * values.
      * 
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      * 
      * @param <V>
      *            the type of collection elements
@@ -259,7 +249,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      */
     public <V> EntryStream<T, V> cross(Collection<? extends V> other) {
         if (other.isEmpty())
-            return strategy().<T, V> newEntryStream(Stream.empty()).onClose(stream::close);
+            return strategy().<T, V> newEntryStream(delegate(Spliterators.emptySpliterator()));
         return strategy()
                 .newEntryStream(stream.flatMap(a -> other.stream().map(b -> new SimpleImmutableEntry<>(a, b))));
     }
@@ -269,7 +259,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * stream and corresponding values are supplied by given function.
      * 
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      * 
      * @param <V>
      *            the type of values.
@@ -282,7 +273,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      */
     public <V> EntryStream<T, V> cross(Function<? super T, ? extends Stream<? extends V>> mapper) {
         return strategy().newEntryStream(
-                stream.flatMap(a -> mapper.apply(a).map(b -> new SimpleImmutableEntry<>(a, b))));
+            stream.flatMap(a -> mapper.apply(a).map(b -> new SimpleImmutableEntry<>(a, b))));
     }
 
     /**
@@ -300,7 +291,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * returned.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param <K>
      *            the type of the keys
@@ -331,7 +323,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * returned.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param <K>
      *            the type of the keys
@@ -368,7 +361,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * {@link ConcurrentMap} then concurrent collector is used.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param <K>
      *            the type of the keys
@@ -394,7 +388,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
             Supplier<M> mapFactory, Collector<? super T, ?, D> downstream) {
         if (stream.isParallel() && mapFactory.get() instanceof ConcurrentMap)
             return (M) collect(Collectors.groupingByConcurrent(classifier, (Supplier<ConcurrentMap<K, D>>) mapFactory,
-                    downstream));
+                downstream));
         return collect(Collectors.groupingBy(classifier, mapFactory, downstream));
     }
 
@@ -413,7 +407,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * returned.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param <K>
      *            the type of the keys
@@ -451,7 +446,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * {@link ConcurrentMap} then concurrent collector is used.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param <K>
      *            the type of the keys
@@ -485,7 +481,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * the input elements according to a {@code Predicate}.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * There are no guarantees on the type, mutability, serializability, or
@@ -512,7 +509,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * according to the supplied {@code Collector}.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * There are no guarantees on the type, mutability, serializability, or
@@ -543,7 +541,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * input elements according to a {@code Predicate}.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * There are no guarantees on the type, mutability, serializability, or
@@ -577,7 +576,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * encounter order.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @return a {@code String}. For empty input stream empty String is
      *         returned.
@@ -592,7 +592,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * by the specified delimiter, in encounter order.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param delimiter
      *            the delimiter to be used between each element
@@ -610,7 +611,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * encounter order.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * @param delimiter
      *            the delimiter to be used between each element
@@ -633,7 +635,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * elements.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * <p>
      * If this stream contains duplicates (according to
@@ -666,7 +669,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * the provided mapping functions to the input elements.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * <p>
      * If the mapped keys contains duplicates (according to
@@ -703,7 +707,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * the provided mapping functions to the input elements.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * <p>
      * If the mapped keys contains duplicates (according to
@@ -752,7 +757,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * input elements.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * <p>
      * If this stream contains duplicates (according to
@@ -787,7 +793,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * applying the provided mapping functions to the input elements.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * <p>
      * If the mapped keys contains duplicates (according to
@@ -826,7 +833,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * applying the provided mapping functions to the input elements.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      * 
      * <p>
      * If the mapped keys contains duplicates (according to
@@ -933,7 +941,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * Returns true if this stream contains the specified value.
      *
      * <p>
-     * This is a short-circuiting terminal operation.
+     * This is a short-circuiting <a
+     * href="package-summary.html#StreamOps">terminal</a> operation.
      * 
      * @param value
      *            the value to look for in the stream. If the value is null then
@@ -952,7 +961,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * equal to the given value.
      *
      * <p>
-     * This is an intermediate operation.
+     * This is an <a href="package-summary.html#StreamOps">intermediate</a>
+     * operation.
      *
      * @param value
      *            the value to remove from the stream. If the value is null then
@@ -979,7 +989,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * stability guarantees are made.
      *
      * <p>
-     * This is a stateful intermediate operation.
+     * This is a stateful <a
+     * href="package-summary.html#StreamOps">intermediate</a> operation.
      *
      * @return the new stream
      * @since 0.2.0
@@ -1000,7 +1011,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * is preserved.
      *
      * <p>
-     * This is a stateful quasi-intermediate operation.
+     * This is a stateful <a
+     * href="package-summary.html#StreamOps">quasi-intermediate</a> operation.
      *
      * @param atLeast
      *            minimal number of occurrences required to select the element.
@@ -1020,7 +1032,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
             result = Spliterators.emptySpliterator();
         else
             result = new DistinctSpliterator<>(spliterator, atLeast);
-        return strategy().newStreamEx(StreamSupport.stream(result, stream.isParallel()).onClose(stream::close));
+        return strategy().newStreamEx(delegate(result));
     }
 
     /**
@@ -1028,7 +1040,8 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * to the every adjacent pair of elements of this stream.
      *
      * <p>
-     * This is a quasi-intermediate operation.
+     * This is a <a href="package-summary.html#StreamOps">quasi-intermediate</a>
+     * operation.
      * 
      * <p>
      * The output stream will contain one element less than this stream. If this
@@ -1043,17 +1056,15 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @since 0.2.1
      */
     public <R> StreamEx<R> pairMap(BiFunction<? super T, ? super T, ? extends R> mapper) {
-        return strategy().newStreamEx(
-                StreamSupport.stream(
-                        new PairSpliterator.PSOfRef<T, R>(mapper, stream.spliterator(), null, false, null, false),
-                        stream.isParallel()).onClose(stream::close));
+        return strategy().newStreamEx(delegate(new PairSpliterator.PSOfRef<T, R>(mapper, stream.spliterator())));
     }
 
     /**
      * Performs an action for each adjacent pair of elements of this stream.
      *
      * <p>
-     * This is a terminal operation.
+     * This is a <a href="package-summary.html#StreamOps">terminal</a>
+     * operation.
      *
      * <p>
      * The behavior of this operation is explicitly nondeterministic. For
@@ -1068,11 +1079,11 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      *            a non-interfering action to perform on the elements
      * @since 0.2.2
      */
-    public void forPairs(BiConsumer<T, T> action) {
+    public void forPairs(BiConsumer<? super T, ? super T> action) {
         pairMap((a, b) -> {
             action.accept(a, b);
             return null;
-        }).reduce(null, (a, b) -> null);
+        }).reduce(null, selectFirst());
     }
 
     /**
@@ -1080,15 +1091,13 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * the merger function and return a new stream.
      * 
      * <p>
-     * This is a quasi-intermediate operation.
+     * This is a <a href="package-summary.html#StreamOps">quasi-intermediate</a>
+     * operation.
      * 
      * @param collapsible
      *            a non-interfering, stateless predicate to apply to the pair of
-     *            elements which returns true for elements which are
-     *            collapsible. If {@code collapsible(a, b)} is true, then the
-     *            following invariants must be held:
-     *            {@code collapsible(merger(a, b), c) = collapsible(b, c)} and
-     *            {@code collapsible(c, merger(a, b)) = collapsible(c, a)}.
+     *            adjacent elements of the input stream which returns true for
+     *            elements which are collapsible.
      * @param merger
      *            a non-interfering, stateless, associative function to merge
      *            two adjacent elements for which collapsible predicate returned
@@ -1097,11 +1106,14 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @return the new stream
      * @since 0.3.1
      */
-    public StreamEx<T> collapse(BiPredicate<T, T> collapsible, BinaryOperator<T> merger) {
+    public StreamEx<T> collapse(BiPredicate<? super T, ? super T> collapsible, BinaryOperator<T> merger) {
+        return collapseInternal(collapsible, Function.identity(), merger, merger);
+    }
+
+    private <R> StreamEx<R> collapseInternal(BiPredicate<? super T, ? super T> collapsible, Function<T, R> mapper,
+            BiFunction<R, T, R> accumulator, BinaryOperator<R> combiner) {
         return strategy().newStreamEx(
-                StreamSupport.stream(
-                        new CollapseSpliterator<>(collapsible, merger, stream.spliterator(), null, false, null, false),
-                        stream.isParallel()).onClose(stream::close));
+            delegate(new CollapseSpliterator<>(collapsible, mapper, accumulator, combiner, stream.spliterator())));
     }
 
     /**
@@ -1110,21 +1122,50 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * series.
      * 
      * <p>
-     * This is a quasi-intermediate operation.
+     * This is a <a href="package-summary.html#StreamOps">quasi-intermediate</a>
+     * operation.
      * 
      * <p>
-     * {@code stream.sorted().collapse(Objects::equals)} is equivalent to
-     * {@code stream.sorted().distinct()}.
+     * For sorted stream {@code collapse(Objects::equals)} is equivalent to
+     * {@code distinct()}.
      * 
      * @param collapsible
-     *            a non-interfering, stateless, transitive predicate to apply to
-     *            the pair of elements which returns true for elements which are
-     *            collapsible.
+     *            a non-interfering, stateless predicate to apply to the pair of
+     *            adjacent input elements which returns true for elements which
+     *            are collapsible.
      * @return the new stream
      * @since 0.3.1
      */
-    public StreamEx<T> collapse(BiPredicate<T, T> collapsible) {
-        return collapse(collapsible, (a, b) -> a);
+    public StreamEx<T> collapse(BiPredicate<? super T, ? super T> collapsible) {
+        return collapse(collapsible, selectFirst());
+    }
+
+    /**
+     * Collapses adjacent equal elements and returns an {@link EntryStream}
+     * where keys are input elements and values specify how many elements were
+     * collapsed.
+     * 
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">quasi-intermediate</a>
+     * operation.
+     * 
+     * <p>
+     * For sorted input {@code runLengths().toMap()} is the same as
+     * {@code groupingBy(Function.identity(), Collectors.counting())}, but may
+     * perform faster. For unsorted input the resulting stream may contain
+     * repeating keys.
+     * 
+     * @return the new stream
+     * @since 0.3.3
+     */
+    public EntryStream<T, Long> runLengths() {
+        return EntryStream.of(collapseInternal(Objects::equals, t -> new ObjLongBox<>(t, 1L), (acc, t) -> {
+            acc.b++;
+            return acc;
+        }, (e1, e2) -> {
+            e1.b += e2.b;
+            return e1;
+        }));
     }
 
     /**
@@ -1132,24 +1173,80 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * adjacent elements are grouped according to supplied predicate.
      * 
      * <p>
-     * This is a quasi-intermediate operation.
+     * This is a <a href="package-summary.html#StreamOps">quasi-intermediate</a>
+     * operation.
+     * 
+     * <p>
+     * There are no guarantees on the type, mutability, serializability, or
+     * thread-safety of the {@code List} objects of the resulting stream.
      * 
      * @param sameGroup
-     *            a non-interfering, stateless, transitive predicate to apply to
-     *            the pair of elements which returns true for elements which
-     *            belong to the same group.
+     *            a non-interfering, stateless predicate to apply to the pair of
+     *            adjacent elements which returns true for elements which belong
+     *            to the same group.
      * @return the new stream
      * @since 0.3.1
      */
-    public StreamEx<List<T>> groupRuns(BiPredicate<T, T> sameGroup) {
-        return map(t -> {
-            List<T> res = new ArrayList<>();
-            res.add(t);
-            return res;
-        }).collapse((a, b) -> sameGroup.test(a.get(a.size() - 1), b.get(0)), (a, b) -> {
-            a.addAll(b);
-            return a;
+    public StreamEx<List<T>> groupRuns(BiPredicate<? super T, ? super T> sameGroup) {
+        return collapseInternal(sameGroup, Collections::singletonList, (acc, t) -> {
+            if (!(acc instanceof ArrayList)) {
+                T old = acc.get(0);
+                acc = new ArrayList<>();
+                acc.add(old);
+            }
+            acc.add(t);
+            return acc;
+        }, (acc1, acc2) -> {
+            if (!(acc1 instanceof ArrayList)) {
+                T old = acc1.get(0);
+                acc1 = new ArrayList<>();
+                acc1.add(old);
+            }
+            acc1.addAll(acc2);
+            return acc1;
         });
+    }
+
+    /**
+     * Returns a stream consisting of results of applying the given function to
+     * the intervals created from the source elements.
+     * 
+     * <p>
+     * This is a <a href="package-summary.html#StreamOps">quasi-intermediate</a>
+     * operation. This operation is the same as
+     * {@code groupRuns(sameInterval).map(list -> mapper.apply(list.get(0), list.get(list.size()-1)))}
+     * , but has less overhead as only first and last elements of each interval
+     * are tracked.
+     * 
+     * @param <U>
+     *            the type of the resulting elements
+     * @param sameInterval
+     *            a non-interfering, stateless predicate to apply to the pair of
+     *            adjacent elements which returns true for elements which belong
+     *            to the same interval.
+     * @param mapper
+     *            a non-interfering, stateless function to apply to the interval
+     *            borders and produce the resulting element. If value was not
+     *            merged to the interval, then mapper will receive the same
+     *            value twice, otherwise it will receive the leftmost and the
+     *            rightmost values which were merged to the interval.
+     *            Intermediate interval elements are not available to the
+     *            mapper. If they are important, consider using
+     *            {@link #groupRuns(BiPredicate)} and map afterwards.
+     * @return the new stream
+     * @see #collapse(BiPredicate, BinaryOperator)
+     * @see #groupRuns(BiPredicate)
+     * @since 0.3.3
+     */
+    public <U> StreamEx<U> intervalMap(BiPredicate<? super T, ? super T> sameInterval,
+            BiFunction<? super T, ? super T, ? extends U> mapper) {
+        return collapseInternal(sameInterval, PairBox::single, (box, t) -> {
+            box.b = t;
+            return box;
+        }, (left, right) -> {
+            left.b = right.b;
+            return left;
+        }).map(pair -> mapper.apply(pair.a, pair.b));
     }
 
     /**
@@ -1247,6 +1344,21 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
     }
 
     /**
+     * Returns a sequential {@link StreamEx} created from given
+     * {@link Spliterator}.
+     *
+     * @param <T>
+     *            the type of stream elements
+     * @param spliterator
+     *            a spliterator to create the stream from.
+     * @return the new stream
+     * @since 0.3.4
+     */
+    public static <T> StreamEx<T> of(Spliterator<T> spliterator) {
+        return new StreamEx<>(StreamSupport.stream(spliterator, false));
+    }
+
+    /**
      * Returns a sequential {@code StreamEx} containing an {@link Optional}
      * value, if present, otherwise returns an empty {@code StreamEx}.
      *
@@ -1305,13 +1417,43 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @param reader
      *            the reader to get the lines from
      * @return a {@code StreamEx<String>} providing the lines of text described
-     *         by this {@code BufferedReader}
+     *         by supplied {@code BufferedReader}
      * @see BufferedReader#lines()
      */
     public static StreamEx<String> ofLines(BufferedReader reader) {
         return new StreamEx<>(reader.lines());
     }
 
+    /**
+     * Returns a {@code StreamEx}, the elements of which are lines read from the
+     * supplied {@link Reader}. The {@code StreamEx} is lazily populated, i.e.,
+     * read only occurs during the terminal stream operation.
+     *
+     * <p>
+     * The reader must not be operated on during the execution of the terminal
+     * stream operation. Otherwise, the result of the terminal stream operation
+     * is undefined.
+     *
+     * <p>
+     * After execution of the terminal stream operation there are no guarantees
+     * that the reader will be at a specific position from which to read the
+     * next character or line.
+     *
+     * <p>
+     * If an {@link IOException} is thrown when accessing the underlying
+     * {@code Reader}, it is wrapped in an {@link UncheckedIOException} which
+     * will be thrown from the {@code StreamEx} method that caused the read to
+     * take place. This method will return a StreamEx if invoked on a Reader
+     * that is closed. Any operation on that stream that requires reading from
+     * the Reader after it is closed, will cause an UncheckedIOException to be
+     * thrown.
+     *
+     * @param reader
+     *            the reader to get the lines from
+     * @return a {@code StreamEx<String>} providing the lines of text described
+     *         by supplied {@code Reader}
+     * @see #ofLines(BufferedReader)
+     */
     public static StreamEx<String> ofLines(Reader reader) {
         if (reader instanceof BufferedReader)
             return new StreamEx<>(((BufferedReader) reader).lines());
@@ -1354,8 +1496,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @see Map#keySet()
      */
     public static <T, V> StreamEx<T> ofKeys(Map<T, V> map, Predicate<V> valueFilter) {
-        return new StreamEx<>(map.entrySet().stream().filter(entry -> valueFilter.test(entry.getValue()))
-                .map(Entry::getKey));
+        return EntryStream.of(map).filterValues(valueFilter).keys();
     }
 
     /**
@@ -1395,14 +1536,35 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @see Map#values()
      */
     public static <K, T> StreamEx<T> ofValues(Map<K, T> map, Predicate<K> keyFilter) {
-        return new StreamEx<>(map.entrySet().stream().filter(entry -> keyFilter.test(entry.getKey()))
-                .map(Entry::getValue));
+        return EntryStream.of(map).filterKeys(keyFilter).values();
     }
 
+    /**
+     * Return an ordered {@code StreamEx} over the zip file entries of given
+     * {@link ZipFile}. Entries appear in the {@code StreamEx} in the order they
+     * appear in the central directory of the zip file.
+     *
+     * @param file
+     *            a {@code ZipFile} object to read the entries from.
+     * @return an ordered {@code StreamEx} of entries in given zip file
+     * @throws IllegalStateException
+     *             if the zip file has been closed
+     */
     public static StreamEx<? extends ZipEntry> ofEntries(ZipFile file) {
         return new StreamEx<>(file.stream());
     }
 
+    /**
+     * Return an ordered {@code StreamEx} over the jar file entries of given
+     * {@link JarFile}. Entries appear in the {@code StreamEx} in the order they
+     * appear in the central directory of the jar file.
+     *
+     * @param file
+     *            a {@code JarFile} object to read the entries from.
+     * @return an ordered {@code StreamEx} of entries in given jar file
+     * @throws IllegalStateException
+     *             if the jar file has been closed
+     */
     public static StreamEx<JarEntry> ofEntries(JarFile file) {
         return new StreamEx<>(file.stream());
     }
@@ -1419,7 +1581,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @since 0.2.2
      */
     public static StreamEx<int[]> ofPermutations(int length) {
-        return new StreamEx<>(StreamSupport.stream(new PermutationSpliterator(length), false).map(perm -> perm.clone()));
+        return of(new PermutationSpliterator(length));
     }
 
     /**
@@ -1522,9 +1684,9 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      * @since 0.1.2
      */
     public static <T> StreamEx<T> constant(T value, long length) {
-        return new StreamEx<>(Stream.generate(() -> value).limit(length));
+        return of(new ConstantSpliterator.ConstRef<>(value, length));
     }
-
+    
     /**
      * Returns a sequential {@code StreamEx} containing the results of applying
      * the given function to the corresponding pairs of values in given two
@@ -1555,7 +1717,7 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
      */
     public static <U, V, T> StreamEx<T> zip(List<U> first, List<V> second,
             BiFunction<? super U, ? super V, ? extends T> mapper) {
-        return intStreamForLength(first.size(), second.size()).mapToObj(i -> mapper.apply(first.get(i), second.get(i)));
+        return of(new RangeBasedSpliterator.ZipRef<>(0, checkLength(first.size(), second.size()), mapper, first, second));
     }
 
     /**
@@ -1627,5 +1789,35 @@ public class StreamEx<T> extends AbstractStreamEx<T, StreamEx<T>> {
     @SuppressWarnings("unchecked")
     public static <T, TT extends T> StreamEx<T> ofTree(T root, Class<TT> collectionClass, Function<TT, Stream<T>> mapper) {
         return ofTree(root, t -> collectionClass.isInstance(t) ? mapper.apply((TT) t) : null);
+    }
+
+    /**
+     * Returns a new {@code StreamEx} which consists of non-overlapping sublists
+     * of given source list having the specified length (the last sublist may be
+     * shorter).
+     * 
+     * <p>
+     * This method calls {@link List#subList(int, int)} internally, so source
+     * list must have it properly implemented as well as provide fast random
+     * access.
+     * 
+     * @param <T>
+     *            the type of source list elements.
+     * @param source
+     *            the source list
+     * @param length
+     *            the length of each sublist except possibly the last one.
+     * @return the new stream of sublists.
+     * @throws IllegalArgumentException
+     *             if length is negative or zero.
+     * @since 0.3.3
+     */
+    public static <T> StreamEx<List<T>> ofSubLists(List<T> source, int length) {
+        if (length <= 0)
+            throw new IllegalArgumentException("length = " + length);
+        int size = source.size();
+        if (size <= 0)
+            return StreamEx.empty();
+        return of(new RangeBasedSpliterator.OfSubLists<>(source, length));
     }
 }

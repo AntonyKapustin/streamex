@@ -15,9 +15,16 @@
  */
 package javax.util.streamex;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -41,6 +48,29 @@ import static javax.util.streamex.StreamExInternals.*;
 public final class MoreCollectors {
     private MoreCollectors() {
         throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns a {@code Collector} which just ignores the input and calls the
+     * provided supplier once to return the output.
+     * 
+     * @param <T>
+     *            the type of input elements
+     * @param <U>
+     *            the type of output
+     * @param supplier
+     *            the supplier of the output
+     * @return a {@code Collector} which just ignores the input and calls the
+     *         provided supplier once to return the output.
+     */
+    private static <T, U> Collector<T, ?, U> empty(Supplier<U> supplier) {
+        return Collector.of(() -> null, (acc, t) -> {
+        }, selectFirst(), acc -> supplier.get(), Collector.Characteristics.UNORDERED,
+            Collector.Characteristics.CONCURRENT);
+    }
+
+    private static <T> Collector<T, ?, List<T>> empty() {
+        return empty(ArrayList<T>::new);
     }
 
     /**
@@ -82,6 +112,21 @@ public final class MoreCollectors {
      */
     public static <T, U> Collector<T, ?, Integer> distinctCount(Function<? super T, U> mapper) {
         return Collectors.collectingAndThen(Collectors.mapping(mapper, Collectors.toSet()), Set::size);
+    }
+
+    /**
+     * Returns a {@code Collector} accepting elements of type {@code T} that
+     * counts the number of input elements and returns result as {@code Integer}
+     * . If no elements are present, the result is 0.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @return a {@code Collector} that counts the input elements
+     * @since 0.3.3
+     * @see Collectors#counting()
+     */
+    public static <T> Collector<T, ?, Integer> countingInt() {
+        return Collectors.reducing(0, t -> 1, Integer::sum);
     }
 
     /**
@@ -140,17 +185,33 @@ public final class MoreCollectors {
         }, c.toArray(new Characteristics[c.size()]));
     }
 
-    public static <T> Collector<T, ?, List<T>> maxAll(Comparator<? super T> comparator) {
-        return maxAll(comparator, Collectors.toList());
-    }
-
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and bigger than any other element according to the
+     * specified {@link Comparator}. The found elements are reduced using the
+     * specified downstream {@code Collector}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param <A>
+     *            the intermediate accumulation type of the downstream collector
+     * @param <D>
+     *            the result type of the downstream reduction
+     * @param comparator
+     *            a {@code Comparator} to compare the elements
+     * @param downstream
+     *            a {@code Collector} implementing the downstream reduction
+     * @return a {@code Collector} which finds all the maximal elements.
+     * @see #maxAll(Comparator)
+     * @see #maxAll(Collector)
+     * @see #maxAll()
+     */
     public static <T, A, D> Collector<T, ?, D> maxAll(Comparator<? super T> comparator,
             Collector<? super T, A, D> downstream) {
         Supplier<A> downstreamSupplier = downstream.supplier();
         BiConsumer<A, ? super T> downstreamAccumulator = downstream.accumulator();
         BinaryOperator<A> downstreamCombiner = downstream.combiner();
-        @SuppressWarnings("unchecked")
-        Supplier<PairBox<A, T>> supplier = () -> new PairBox<>(downstreamSupplier.get(), (T) NONE);
+        Supplier<PairBox<A, T>> supplier = () -> new PairBox<>(downstreamSupplier.get(), none());
         BiConsumer<PairBox<A, T>, T> accumulator = (acc, t) -> {
             if (acc.b == NONE) {
                 downstreamAccumulator.accept(acc.a, t);
@@ -186,11 +247,424 @@ public final class MoreCollectors {
         return Collector.of(supplier, accumulator, combiner, finisher);
     }
 
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and bigger than any other element according to the
+     * specified {@link Comparator}. The found elements are collected to
+     * {@link List}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param comparator
+     *            a {@code Comparator} to compare the elements
+     * @return a {@code Collector} which finds all the maximal elements and
+     *         collects them to the {@code List}.
+     * @see #maxAll(Comparator, Collector)
+     * @see #maxAll()
+     */
+    public static <T> Collector<T, ?, List<T>> maxAll(Comparator<? super T> comparator) {
+        return maxAll(comparator, Collectors.toList());
+    }
+
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and bigger than any other element according to the natural
+     * order. The found elements are reduced using the specified downstream
+     * {@code Collector}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param <A>
+     *            the intermediate accumulation type of the downstream collector
+     * @param <D>
+     *            the result type of the downstream reduction
+     * @param downstream
+     *            a {@code Collector} implementing the downstream reduction
+     * @return a {@code Collector} which finds all the maximal elements.
+     * @see #maxAll(Comparator, Collector)
+     * @see #maxAll(Comparator)
+     * @see #maxAll()
+     */
+    public static <T extends Comparable<? super T>, A, D> Collector<T, ?, D> maxAll(Collector<T, A, D> downstream) {
+        return maxAll(Comparator.<T> naturalOrder(), downstream);
+    }
+
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and bigger than any other element according to the natural
+     * order. The found elements are collected to {@link List}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @return a {@code Collector} which finds all the maximal elements and
+     *         collects them to the {@code List}.
+     * @see #maxAll(Comparator)
+     * @see #maxAll(Collector)
+     */
+    public static <T extends Comparable<? super T>> Collector<T, ?, List<T>> maxAll() {
+        return maxAll(Comparator.<T> naturalOrder(), Collectors.toList());
+    }
+
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and smaller than any other element according to the
+     * specified {@link Comparator}. The found elements are reduced using the
+     * specified downstream {@code Collector}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param <A>
+     *            the intermediate accumulation type of the downstream collector
+     * @param <D>
+     *            the result type of the downstream reduction
+     * @param comparator
+     *            a {@code Comparator} to compare the elements
+     * @param downstream
+     *            a {@code Collector} implementing the downstream reduction
+     * @return a {@code Collector} which finds all the minimal elements.
+     * @see #minAll(Comparator)
+     * @see #minAll(Collector)
+     * @see #minAll()
+     */
     public static <T, A, D> Collector<T, ?, D> minAll(Comparator<? super T> comparator, Collector<T, A, D> downstream) {
         return maxAll(comparator.reversed(), downstream);
     }
 
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and smaller than any other element according to the
+     * specified {@link Comparator}. The found elements are collected to
+     * {@link List}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param comparator
+     *            a {@code Comparator} to compare the elements
+     * @return a {@code Collector} which finds all the minimal elements and
+     *         collects them to the {@code List}.
+     * @see #minAll(Comparator, Collector)
+     * @see #minAll()
+     */
     public static <T> Collector<T, ?, List<T>> minAll(Comparator<? super T> comparator) {
         return maxAll(comparator.reversed(), Collectors.toList());
+    }
+
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and smaller than any other element according to the natural
+     * order. The found elements are reduced using the specified downstream
+     * {@code Collector}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param <A>
+     *            the intermediate accumulation type of the downstream collector
+     * @param <D>
+     *            the result type of the downstream reduction
+     * @param downstream
+     *            a {@code Collector} implementing the downstream reduction
+     * @return a {@code Collector} which finds all the minimal elements.
+     * @see #minAll(Comparator, Collector)
+     * @see #minAll(Comparator)
+     * @see #minAll()
+     */
+    public static <T extends Comparable<? super T>, A, D> Collector<T, ?, D> minAll(Collector<T, A, D> downstream) {
+        return maxAll(Comparator.<T> reverseOrder(), downstream);
+    }
+
+    /**
+     * Returns a {@code Collector} which finds all the elements which are equal
+     * to each other and smaller than any other element according to the natural
+     * order. The found elements are collected to {@link List}.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @return a {@code Collector} which finds all the minimal elements and
+     *         collects them to the {@code List}.
+     * @see #minAll(Comparator)
+     * @see #minAll(Collector)
+     */
+    public static <T extends Comparable<? super T>> Collector<T, ?, List<T>> minAll() {
+        return maxAll(Comparator.<T> reverseOrder(), Collectors.toList());
+    }
+
+    /**
+     * Returns a {@code Collector} which collects only the first stream element
+     * if any.
+     * 
+     * The operation performed by the returned collector is equivalent to
+     * {@code stream.findFirst()}, but the whole input stream is consumed. This
+     * collector is mostly useful as a downstream collector.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @return a collector which returns an {@link Optional} which describes the
+     *         first element of the stream. For empty stream an empty
+     *         {@code Optional} is returned.
+     */
+    public static <T> Collector<T, ?, Optional<T>> first() {
+        return Collectors.reducing(selectFirst());
+    }
+
+    /**
+     * Returns a {@code Collector} which collects only the last stream element
+     * if any.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @return a collector which returns an {@link Optional} which describes the
+     *         last element of the stream. For empty stream an empty
+     *         {@code Optional} is returned.
+     */
+    public static <T> Collector<T, ?, Optional<T>> last() {
+        return Collectors.reducing((u, v) -> v);
+    }
+
+    /**
+     * Returns a {@code Collector} which collects at most specified number of
+     * the first stream elements into the {@link List}.
+     * 
+     * The operation performed by the returned collector is equivalent to
+     * {@code stream.limit(n).collect(Collectors.toList())}, but the whole input
+     * stream is consumed. This collector is mostly useful as a downstream
+     * collector.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @param n
+     *            maximum number of stream elements to preserve
+     * @return a collector which returns a {@code List} containing the first n
+     *         stream elements or less if the stream was shorter.
+     */
+    public static <T> Collector<T, ?, List<T>> head(int n) {
+        if (n <= 0)
+            return empty();
+        return Collector.<T, List<T>> of(ArrayList::new, (acc, t) -> {
+            if (acc.size() < n)
+                acc.add(t);
+        }, (acc1, acc2) -> {
+            acc1.addAll(acc2.subList(0, Math.min(acc2.size(), n - acc1.size())));
+            return acc1;
+        });
+    }
+
+    /**
+     * Returns a {@code Collector} which collects at most specified number of
+     * the last stream elements into the {@link List}.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @param n
+     *            maximum number of stream elements to preserve
+     * @return a collector which returns a {@code List} containing the last n
+     *         stream elements or less if the stream was shorter.
+     */
+    public static <T> Collector<T, ?, List<T>> tail(int n) {
+        if (n <= 0)
+            return empty();
+        return Collector.<T, Deque<T>, List<T>> of(ArrayDeque::new, (acc, t) -> {
+            if (acc.size() == n)
+                acc.pollFirst();
+            acc.addLast(t);
+        }, (acc1, acc2) -> {
+            while (acc2.size() < n && !acc1.isEmpty()) {
+                acc2.addFirst(acc1.pollLast());
+            }
+            return acc2;
+        }, ArrayList<T>::new);
+    }
+
+    /**
+     * Returns a {@code Collector} which collects at most specified number of
+     * the greatest stream elements according to the specified
+     * {@link Comparator} into the {@link List}. The resulting {@code List} is
+     * sorted in comparator reverse order (greatest element is the first).
+     * 
+     * The operation performed by the returned collector is equivalent to
+     * {@code stream.sorted(comparator.reversed()).limit(n).collect(Collectors.toList())}
+     * , but can be performed much faster if the input is not sorted and
+     * {@code n} is much less than the stream size.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @param comparator
+     *            the comparator to compare the elements by
+     * @param n
+     *            maximum number of stream elements to preserve
+     * @return a collector which returns a {@code List} containing the greatest
+     *         n stream elements or less if the stream was shorter.
+     */
+    public static <T> Collector<T, ?, List<T>> greatest(Comparator<? super T> comparator, int n) {
+        if (n <= 0)
+            return empty();
+        BiConsumer<PriorityQueue<T>, T> accumulator = (queue, t) -> {
+            queue.add(t);
+            if (queue.size() > n)
+                queue.poll();
+        };
+        return Collector.of(() -> new PriorityQueue<>(comparator), accumulator, (q1, q2) -> {
+            for (T t : q2) {
+                accumulator.accept(q1, t);
+            }
+            return q1;
+        }, queue -> {
+            List<T> result = new ArrayList<>(queue.size());
+            while (!queue.isEmpty()) {
+                result.add(queue.poll());
+            }
+            Collections.reverse(result);
+            return result;
+        });
+    }
+
+    /**
+     * Returns a {@code Collector} which collects at most specified number of
+     * the greatest stream elements according to the natural order into the
+     * {@link List}. The resulting {@code List} is sorted in reverse order
+     * (greatest element is the first).
+     * 
+     * The operation performed by the returned collector is equivalent to
+     * {@code stream.sorted(Comparator.reverseOrder()).limit(n).collect(Collectors.toList())}
+     * , but can be performed much faster if the input is not sorted and
+     * {@code n} is much less than the stream size.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @param n
+     *            maximum number of stream elements to preserve
+     * @return a collector which returns a {@code List} containing the greatest
+     *         n stream elements or less if the stream was shorter.
+     */
+    public static <T extends Comparable<? super T>> Collector<T, ?, List<T>> greatest(int n) {
+        return greatest(Comparator.<T> naturalOrder(), n);
+    }
+
+    /**
+     * Returns a {@code Collector} which collects at most specified number of
+     * the least stream elements according to the specified {@link Comparator}
+     * into the {@link List}. The resulting {@code List} is sorted in comparator
+     * order (least element is the first).
+     * 
+     * The operation performed by the returned collector is equivalent to
+     * {@code stream.sorted(comparator).limit(n).collect(Collectors.toList())},
+     * but can be performed much faster if the input is not sorted and {@code n}
+     * is much less than the stream size.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @param comparator
+     *            the comparator to compare the elements by
+     * @param n
+     *            maximum number of stream elements to preserve
+     * @return a collector which returns a {@code List} containing the least n
+     *         stream elements or less if the stream was shorter.
+     */
+    public static <T> Collector<T, ?, List<T>> least(Comparator<? super T> comparator, int n) {
+        return greatest(comparator.reversed(), n);
+    }
+
+    /**
+     * Returns a {@code Collector} which collects at most specified number of
+     * the least stream elements according to the natural order into the
+     * {@link List}. The resulting {@code List} is sorted in natural order
+     * (least element is the first).
+     * 
+     * The operation performed by the returned collector is equivalent to
+     * {@code stream.sorted().limit(n).collect(Collectors.toList())}, but can be
+     * performed much faster if the input is not sorted and {@code n} is much
+     * less than the stream size.
+     * 
+     * @param <T>
+     *            the type of the input elements
+     * @param n
+     *            maximum number of stream elements to preserve
+     * @return a collector which returns a {@code List} containing the least n
+     *         stream elements or less if the stream was shorter.
+     */
+    public static <T extends Comparable<? super T>> Collector<T, ?, List<T>> least(int n) {
+        return greatest(Comparator.<T> reverseOrder(), n);
+    }
+
+    /**
+     * Returns a {@code Collector} which finds the index of the minimal stream
+     * element according to the specified {@link Comparator}. If there are
+     * several minimal elements, the index of the first one is returned.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param comparator
+     *            a {@code Comparator} to compare the elements
+     * @return a {@code Collector} which finds the index of the minimal element.
+     * @see #minIndex()
+     */
+    public static <T> Collector<T, ?, OptionalLong> minIndex(Comparator<? super T> comparator) {
+        class Container {
+            T value;
+            long count = 0;
+            long index = -1;
+        }
+        BiConsumer<Container, T> accumulator = (c, t) -> {
+            if (c.index == -1 || comparator.compare(c.value, t) > 0) {
+                c.value = t;
+                c.index = c.count;
+            }
+            c.count++;
+        };
+        BinaryOperator<Container> combiner = (c1, c2) -> {
+            if (c1.index == -1 || (c2.index != -1 && comparator.compare(c1.value, c2.value) > 0)) {
+                c2.index += c1.count;
+                c2.count += c1.count;
+                return c2;
+            }
+            c1.count += c2.count;
+            return c1;
+        };
+        Function<Container, OptionalLong> finisher = c -> c.index == -1 ? OptionalLong.empty() : OptionalLong
+                .of(c.index);
+        return Collector.of(Container::new, accumulator, combiner, finisher);
+    }
+
+    /**
+     * Returns a {@code Collector} which finds the index of the minimal stream
+     * element according to the elements natural order. If there are several
+     * minimal elements, the index of the first one is returned.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @return a {@code Collector} which finds the index of the minimal element.
+     * @see #minIndex(Comparator)
+     */
+    public static <T extends Comparable<? super T>> Collector<T, ?, OptionalLong> minIndex() {
+        return minIndex(Comparator.naturalOrder());
+    }
+
+    /**
+     * Returns a {@code Collector} which finds the index of the maximal stream
+     * element according to the specified {@link Comparator}. If there are
+     * several maximal elements, the index of the first one is returned.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @param comparator
+     *            a {@code Comparator} to compare the elements
+     * @return a {@code Collector} which finds the index of the maximal element.
+     * @see #maxIndex()
+     */
+    public static <T> Collector<T, ?, OptionalLong> maxIndex(Comparator<? super T> comparator) {
+        return minIndex(comparator.reversed());
+    }
+
+    /**
+     * Returns a {@code Collector} which finds the index of the maximal stream
+     * element according to the elements natural order. If there are several
+     * maximal elements, the index of the first one is returned.
+     *
+     * @param <T>
+     *            the type of the input elements
+     * @return a {@code Collector} which finds the index of the maximal element.
+     * @see #maxIndex(Comparator)
+     */
+    public static <T extends Comparable<? super T>> Collector<T, ?, OptionalLong> maxIndex() {
+        return minIndex(Comparator.reverseOrder());
     }
 }

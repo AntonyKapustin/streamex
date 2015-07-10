@@ -63,8 +63,7 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
      */
     @Override
     default BiConsumer<A, Double> accumulator() {
-        ObjDoubleConsumer<A> doubleAccumulator = doubleAccumulator();
-        return (a, i) -> doubleAccumulator.accept(a, i);
+        return doubleAccumulator()::accept;
     }
 
     /**
@@ -150,8 +149,8 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
      *         separated by the specified delimiter, in encounter order
      */
     static DoubleCollector<?, String> joining(CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
-        return of(StringBuilder::new, (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i),
-                joinMerger(delimiter), joinFinisher(prefix, suffix));
+        return of(StringBuilder::new, StreamExInternals.joinAccumulatorDouble(delimiter), joinMerger(delimiter),
+            joinFinisher(prefix, suffix));
     }
 
     /**
@@ -165,18 +164,30 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
      *         separated by the specified delimiter, in encounter order
      */
     static DoubleCollector<?, String> joining(CharSequence delimiter) {
-        return of(StringBuilder::new, (sb, i) -> (sb.length() > 0 ? sb.append(delimiter) : sb).append(i),
-                joinMerger(delimiter), StringBuilder::toString);
+        return of(StringBuilder::new, StreamExInternals.joinAccumulatorDouble(delimiter), joinMerger(delimiter),
+            StringBuilder::toString);
     }
 
     /**
      * Returns a {@code DoubleCollector} that counts the number of input
-     * elements. If no elements are present, the result is 0.
+     * elements and returns the result as {@code Long}. If no elements are
+     * present, the result is 0.
      *
      * @return a {@code DoubleCollector} that counts the input elements
      */
     static DoubleCollector<?, Long> counting() {
-        return of(() -> new long[1], (box, i) -> box[0]++, SUM_LONG, UNBOX_LONG);
+        return of(LONG_BOX, (box, i) -> box[0]++, SUM_LONG, UNBOX_LONG);
+    }
+
+    /**
+     * Returns an {@code DoubleCollector} that counts the number of input
+     * elements and returns the result as {@code Integer}. If no elements are
+     * present, the result is 0.
+     *
+     * @return an {@code DoubleCollector} that counts the input elements
+     */
+    static DoubleCollector<?, Integer> countingInt() {
+        return of(INT_BOX, (box, i) -> box[0]++, SUM_INT, UNBOX_INT);
     }
 
     /**
@@ -232,7 +243,7 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
     static <A, R> DoubleCollector<?, R> mapping(DoubleUnaryOperator mapper, DoubleCollector<A, R> downstream) {
         ObjDoubleConsumer<A> downstreamAccumulator = downstream.doubleAccumulator();
         return new DoubleCollectorImpl<>(downstream.supplier(), (r, t) -> downstreamAccumulator.accept(r,
-                mapper.applyAsDouble(t)), downstream.merger(), downstream.finisher(), downstream.characteristics());
+            mapper.applyAsDouble(t)), downstream.merger(), downstream.finisher(), downstream.characteristics());
     }
 
     /**
@@ -262,8 +273,8 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
                     ((MergingCollector<U, A, R>) downstream).merger(), downstream.finisher(),
                     downstream.characteristics());
         }
-        return of(Box.supplier(downstream.supplier()), (box, i) -> accumulator.accept(box.obj, mapper.apply(i)),
-                Box.combiner(downstream.combiner()), Box.finisher(downstream.finisher()));
+        return of(Box.supplier(downstream.supplier()), (box, i) -> accumulator.accept(box.a, mapper.apply(i)),
+            Box.combiner(downstream.combiner()), Box.finisher(downstream.finisher()));
     }
 
     /**
@@ -337,7 +348,7 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
      */
     static DoubleCollector<?, Double> reducing(double identity, DoubleBinaryOperator op) {
         return of(() -> new double[] { identity }, (box, i) -> box[0] = op.applyAsDouble(box[0], i),
-                (box1, box2) -> box1[0] = op.applyAsDouble(box1[0], box2[0]), UNBOX_DOUBLE);
+            (box1, box2) -> box1[0] = op.applyAsDouble(box1[0], box2[0]), UNBOX_DOUBLE);
     }
 
     /**
@@ -395,7 +406,7 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
             DoubleCollector<A, D> downstream) {
         ObjDoubleConsumer<A> downstreamAccumulator = downstream.doubleAccumulator();
         ObjDoubleConsumer<BooleanMap<A>> accumulator = (result, t) -> downstreamAccumulator.accept(
-                predicate.test(t) ? result.trueValue : result.falseValue, t);
+            predicate.test(t) ? result.trueValue : result.falseValue, t);
         BiConsumer<BooleanMap<A>, BooleanMap<A>> merger = BooleanMap.merger(downstream.merger());
         Supplier<BooleanMap<A>> supplier = BooleanMap.supplier(downstream.supplier());
         if (downstream.characteristics().contains(Collector.Characteristics.IDENTITY_FINISH)) {
@@ -515,7 +526,7 @@ public interface DoubleCollector<A, R> extends MergingCollector<Double, A, R> {
             return (DoubleCollector<?, M>) of((Supplier<Map<K, A>>) mapFactory, accumulator, merger);
         } else {
             return of((Supplier<Map<K, A>>) mapFactory, accumulator, merger,
-                    mapFinisher((Function<A, A>) downstream.finisher()));
+                mapFinisher((Function<A, A>) downstream.finisher()));
         }
     }
 
