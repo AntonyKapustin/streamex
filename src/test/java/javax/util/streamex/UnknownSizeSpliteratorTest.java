@@ -9,11 +9,11 @@ import java.util.stream.StreamSupport;
 
 import org.junit.Test;
 
-public class IteratorSpliteratorTest {
+public class UnknownSizeSpliteratorTest {
     @Test
     public void testSplit() {
         List<Integer> input = IntStreamEx.range(100).boxed().toList();
-        IteratorSpliterator<Integer> spliterator = new IteratorSpliterator<>(input.iterator());
+        UnknownSizeSpliterator<Integer> spliterator = new UnknownSizeSpliterator<>(input.iterator());
         assertEquals(Long.MAX_VALUE, spliterator.estimateSize());
         AtomicInteger count = new AtomicInteger();
         assertTrue(spliterator.tryAdvance(count::addAndGet));
@@ -33,11 +33,11 @@ public class IteratorSpliteratorTest {
     @Test
     public void testAsStream() {
         List<Integer> input = IntStreamEx.range(100).boxed().toList();
-        assertEquals(4950, StreamSupport.stream(new IteratorSpliterator<>(input.iterator()), false).mapToInt(x -> x).sum());
-        assertEquals(4950, StreamSupport.stream(new IteratorSpliterator<>(input.iterator()), true).mapToInt(x -> x).sum());
+        assertEquals(4950, StreamSupport.stream(new UnknownSizeSpliterator<>(input.iterator()), false).mapToInt(x -> x).sum());
+        assertEquals(4950, StreamSupport.stream(new UnknownSizeSpliterator<>(input.iterator()), true).mapToInt(x -> x).sum());
         
         input = IntStreamEx.range(5000).boxed().toList();
-        assertEquals(12497500, StreamSupport.stream(new IteratorSpliterator<>(input.iterator()), false).mapToInt(x -> x).sum());
-        assertEquals(12497500, StreamSupport.stream(new IteratorSpliterator<>(input.iterator()), true).mapToInt(x -> x).sum());
+        assertEquals(12497500, StreamSupport.stream(new UnknownSizeSpliterator<>(input.iterator()), false).mapToInt(x -> x).sum());
+        assertEquals(12497500, StreamSupport.stream(new UnknownSizeSpliterator<>(input.iterator()), true).mapToInt(x -> x).sum());
     }
 }
