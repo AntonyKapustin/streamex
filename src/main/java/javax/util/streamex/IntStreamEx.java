@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.PrimitiveIterator;
 import java.util.Random;
 import java.util.Map.Entry;
 import java.util.PrimitiveIterator.OfInt;
@@ -852,9 +853,9 @@ public class IntStreamEx implements IntStream {
      *
      * @param keyExtractor
      *            a non-interfering, stateless function
-     * @return an {@code OptionalInt} describing the first element of this stream for
-     *         which the highest value was returned by key extractor, or an
-     *         empty {@code OptionalInt} if the stream is empty
+     * @return an {@code OptionalInt} describing the first element of this
+     *         stream for which the highest value was returned by key extractor,
+     *         or an empty {@code OptionalInt} if the stream is empty
      * @since 0.1.2
      */
     public OptionalInt maxByDouble(IntToDoubleFunction keyExtractor) {
@@ -1541,6 +1542,23 @@ public class IntStreamEx implements IntStream {
     }
 
     /**
+     * Returns a sequential, ordered {@link IntStreamEx} created from given
+     * {@link java.util.PrimitiveIterator.OfInt}.
+     * 
+     * This method is roughly equivalent to
+     * {@code IntStreamEx.of(Spliterators.spliteratorUnknownSize(iterator, ORDERED))}
+     * , but may show better performance for parallel processing.
+     * 
+     * @param iterator
+     *            an iterator to create the stream from.
+     * @return the new stream
+     * @since 0.3.6
+     */
+    public static IntStreamEx of(PrimitiveIterator.OfInt iterator) {
+        return of(new UnknownSizeSpliterator.USOfInt(iterator));
+    }
+
+    /**
      * Returns a sequential {@code IntStreamEx} containing an
      * {@link OptionalInt} value, if present, otherwise returns an empty
      * {@code IntStreamEx}.
@@ -1648,7 +1666,8 @@ public class IntStreamEx implements IntStream {
      * @see CharSequence#chars()
      */
     public static IntStreamEx ofChars(CharSequence seq) {
-        // In JDK 8 there's only default chars() method which uses IteratorSpliterator
+        // In JDK 8 there's only default chars() method which uses
+        // IteratorSpliterator
         // In JDK 9 chars() method for most of implementations is much better
         return of(IS_JDK9 ? seq.chars() : java.nio.CharBuffer.wrap(seq).chars());
     }

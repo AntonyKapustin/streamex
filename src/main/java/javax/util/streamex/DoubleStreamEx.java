@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.DoubleSummaryStatistics;
 import java.util.Objects;
 import java.util.OptionalDouble;
+import java.util.PrimitiveIterator;
 import java.util.Random;
 import java.util.Spliterator;
 import java.util.Map.Entry;
@@ -1098,6 +1099,23 @@ public class DoubleStreamEx implements DoubleStream {
      */
     public static DoubleStreamEx of(Spliterator.OfDouble spliterator) {
         return new DoubleStreamEx(StreamSupport.doubleStream(spliterator, false));
+    }
+
+    /**
+     * Returns a sequential, ordered {@link DoubleStreamEx} created from given
+     * {@link java.util.PrimitiveIterator.OfDouble}.
+     * 
+     * This method is roughly equivalent to
+     * {@code DoubleStreamEx.of(Spliterators.spliteratorUnknownSize(iterator, ORDERED))}
+     * , but may show better performance for parallel processing.
+     * 
+     * @param iterator
+     *            an iterator to create the stream from.
+     * @return the new stream
+     * @since 0.3.6
+     */
+    public static DoubleStreamEx of(PrimitiveIterator.OfDouble iterator) {
+        return of(new UnknownSizeSpliterator.USOfDouble(iterator));
     }
 
     /**
