@@ -121,7 +121,7 @@ public class TestHelpers {
         sequential.forEachRemaining(t -> fail(msg+": Advance called with " + t));
         assertEquals(msg, expected, seq);
         Random r = new Random(1);
-        for (int n = 1; n < 500; n++) {
+        for (int n = 1; n < 300; n++) {
             Spliterator<T> spliterator = supplier.get();
             List<Spliterator<T>> spliterators = new ArrayList<>();
             spliterators.add(spliterator);
@@ -144,7 +144,7 @@ public class TestHelpers {
             }).sortedBy(Entry::getKey).values().flatMap(Function.identity()).toList();
             assertEquals(msg+":#" + n, expected, list);
         }
-        for (int n = 1; n < 500; n++) {
+        for (int n = 1; n < 300; n++) {
             Spliterator<T> spliterator = supplier.get();
             List<Spliterator<T>> spliterators = new ArrayList<>();
             spliterators.add(spliterator);
