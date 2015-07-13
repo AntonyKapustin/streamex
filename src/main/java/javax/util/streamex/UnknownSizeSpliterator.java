@@ -160,7 +160,7 @@ import java.util.function.LongConsumer;
         public boolean tryAdvance(IntConsumer action) {
             if (it != null) {
                 if (it.hasNext()) {
-                    action.accept(it.next());
+                    action.accept(it.nextInt());
                     return true;
                 }
                 it = null;
@@ -228,7 +228,7 @@ import java.util.function.LongConsumer;
         public boolean tryAdvance(LongConsumer action) {
             if (it != null) {
                 if (it.hasNext()) {
-                    action.accept(it.next());
+                    action.accept(it.nextLong());
                     return true;
                 }
                 it = null;
@@ -296,7 +296,7 @@ import java.util.function.LongConsumer;
         public boolean tryAdvance(DoubleConsumer action) {
             if (it != null) {
                 if (it.hasNext()) {
-                    action.accept(it.next());
+                    action.accept(it.nextDouble());
                     return true;
                 }
                 it = null;
